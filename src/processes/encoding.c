@@ -331,6 +331,28 @@ float encoding_pattern_overlap(uint32_t *pattern_a, uint32_t count_a, uint32_t *
     return (float)matches / (float)smaller;
 }
 
+static uint32_t word_hash_bucket(uint32_t neuron_id) {
+    uint32_t h = neuron_id;
+    h ^= h >> 16;
+    h *= 0x85ebca6b;
+    h ^= h >> 13;
+    h *= 0xc2b2ae35;
+    h ^= h >> 16;
+    return h & (ENGRAM_WORD_HASH_SIZE - 1);
+}
+
+static uint32_t word_hash_alloc(engram_t *eng) {
+    if (eng->word_memory.entry_pool_count >= eng->word_memory.entry_pool_capacity) {
+        uint32_t new_cap = eng->word_memory.entry_pool_capacity * 2;
+        word_hash_entry_t *new_pool = engram_realloc(eng, eng->word_memory.entry_pool,
+                                                      new_cap * sizeof(word_hash_entry_t));
+        if (!new_pool) return ENGRAM_HASH_NONE;
+        eng->word_memory.entry_pool = new_pool;
+        eng->word_memory.entry_pool_capacity = new_cap;
+    }
+    return eng->word_memory.entry_pool_count++;
+}
+
 void word_memory_learn(engram_t *eng, const char *text, size_t size, uint32_t tick) {
     char normalized[1024];
     size_t norm_size = 0;
@@ -346,22 +368,28 @@ void word_memory_learn(engram_t *eng, const char *text, size_t size, uint32_t ti
                 
                 uint32_t neuron_id = word_to_primary_neuron(eng, &normalized[word_start], word_len);
                 
-                int found = 0;
-                for (uint32_t j = 0; j < eng->word_memory.count; j++) {
-                    if (eng->word_memory.entries[j].neuron_id == neuron_id) {
-                        eng->word_memory.entries[j].strength += 0.1f;
-                        if (eng->word_memory.entries[j].strength > 2.0f) {
-                            eng->word_memory.entries[j].strength = 2.0f;
-                        }
-                        eng->word_memory.entries[j].last_seen_tick = tick;
-                        eng->word_memory.entries[j].exposure_count++;
-                        eng->word_memory.entries[j].connection_count++;
-                        found = 1;
+                uint32_t bucket = word_hash_bucket(neuron_id);
+                uint32_t hash_idx = eng->word_memory.hash_table ? eng->word_memory.hash_table[bucket] : ENGRAM_HASH_NONE;
+                word_memory_entry_t *found_entry = NULL;
+                
+                while (hash_idx != ENGRAM_HASH_NONE) {
+                    word_hash_entry_t *hash_entry = &eng->word_memory.entry_pool[hash_idx];
+                    if (hash_entry->neuron_id == neuron_id) {
+                        found_entry = &eng->word_memory.entries[hash_entry->entry_idx];
                         break;
                     }
+                    hash_idx = hash_entry->next;
                 }
                 
-                if (!found) {
+                if (found_entry) {
+                    found_entry->strength += 0.1f;
+                    if (found_entry->strength > 2.0f) {
+                        found_entry->strength = 2.0f;
+                    }
+                    found_entry->last_seen_tick = tick;
+                    found_entry->exposure_count++;
+                    found_entry->connection_count++;
+                } else {
                     if (eng->word_memory.count >= eng->word_memory.capacity) {
                         uint32_t new_cap = eng->word_memory.capacity == 0 ? 2048 : eng->word_memory.capacity * 2;
                         word_memory_entry_t *new_entries = engram_realloc(eng, eng->word_memory.entries,
@@ -375,7 +403,8 @@ void word_memory_learn(engram_t *eng, const char *text, size_t size, uint32_t ti
                     size_t stem_len = stem_word(&normalized[word_start], word_len, stemmed);
                     if (stem_len > 31) stem_len = 31;
                     
-                    word_memory_entry_t *entry = &eng->word_memory.entries[eng->word_memory.count++];
+                    uint32_t entry_idx = eng->word_memory.count++;
+                    word_memory_entry_t *entry = &eng->word_memory.entries[entry_idx];
                     for (size_t k = 0; k < stem_len; k++) {
                         entry->token[k] = stemmed[k];
                     }
@@ -385,6 +414,17 @@ void word_memory_learn(engram_t *eng, const char *text, size_t size, uint32_t ti
                     entry->last_seen_tick = tick;
                     entry->exposure_count = 1;
                     entry->connection_count = 1;
+                    
+                    if (eng->word_memory.hash_table) {
+                        uint32_t new_hash_idx = word_hash_alloc(eng);
+                        if (new_hash_idx != ENGRAM_HASH_NONE) {
+                            word_hash_entry_t *new_hash = &eng->word_memory.entry_pool[new_hash_idx];
+                            new_hash->neuron_id = neuron_id;
+                            new_hash->entry_idx = entry_idx;
+                            new_hash->next = eng->word_memory.hash_table[bucket];
+                            eng->word_memory.hash_table[bucket] = new_hash_idx;
+                        }
+                    }
                 }
             }
             word_start = i + 1;
@@ -406,27 +446,34 @@ int word_memory_reconstruct(engram_t *eng, uint32_t *neuron_ids, uint32_t count,
     for (uint32_t i = 0; i < count && match_count < 48; i++) {
         uint32_t neuron_id = neuron_ids[i];
         
-        for (uint32_t j = 0; j < eng->word_memory.count; j++) {
-            if (eng->word_memory.entries[j].neuron_id == neuron_id &&
-                eng->word_memory.entries[j].strength > 0.1f) {
-                
-                word_memory_entry_t *entry = &eng->word_memory.entries[j];
-                float score = entry->strength;
-                
-                int already_added = 0;
-                for (uint32_t k = 0; k < match_count; k++) {
-                    if (matches[k] == entry) {
-                        already_added = 1;
-                        break;
-                    }
-                }
-                
-                if (!already_added) {
-                    matches[match_count] = entry;
-                    scores[match_count] = score;
-                    match_count++;
-                }
+        uint32_t bucket = word_hash_bucket(neuron_id);
+        uint32_t hash_idx = eng->word_memory.hash_table ? eng->word_memory.hash_table[bucket] : ENGRAM_HASH_NONE;
+        word_memory_entry_t *entry = NULL;
+        
+        while (hash_idx != ENGRAM_HASH_NONE) {
+            word_hash_entry_t *hash_entry = &eng->word_memory.entry_pool[hash_idx];
+            if (hash_entry->neuron_id == neuron_id) {
+                entry = &eng->word_memory.entries[hash_entry->entry_idx];
                 break;
+            }
+            hash_idx = hash_entry->next;
+        }
+        
+        if (entry && entry->strength > 0.1f) {
+            float score = entry->strength;
+            
+            int already_added = 0;
+            for (uint32_t k = 0; k < match_count; k++) {
+                if (matches[k] == entry) {
+                    already_added = 1;
+                    break;
+                }
+            }
+            
+            if (!already_added) {
+                matches[match_count] = entry;
+                scores[match_count] = score;
+                match_count++;
             }
         }
     }
@@ -479,8 +526,63 @@ void word_memory_decay(engram_t *eng, uint32_t current_tick) {
         eng->word_memory.entries[i].strength -= decay;
         
         if (eng->word_memory.entries[i].strength < 0.05f) {
-            eng->word_memory.entries[i] = eng->word_memory.entries[--eng->word_memory.count];
+            uint32_t neuron_id = eng->word_memory.entries[i].neuron_id;
+            uint32_t bucket = word_hash_bucket(neuron_id);
+            uint32_t *prev_idx = eng->word_memory.hash_table ? &eng->word_memory.hash_table[bucket] : NULL;
+            if (prev_idx) {
+                uint32_t entry_idx = *prev_idx;
+                while (entry_idx != ENGRAM_HASH_NONE) {
+                    word_hash_entry_t *entry = &eng->word_memory.entry_pool[entry_idx];
+                    if (entry->entry_idx == i) {
+                        *prev_idx = entry->next;
+                        break;
+                    }
+                    prev_idx = &entry->next;
+                    entry_idx = entry->next;
+                }
+            }
+            
+            uint32_t last_idx = eng->word_memory.count - 1;
+            if (i != last_idx) {
+                eng->word_memory.entries[i] = eng->word_memory.entries[last_idx];
+                
+                uint32_t moved_neuron_id = eng->word_memory.entries[i].neuron_id;
+                uint32_t moved_bucket = word_hash_bucket(moved_neuron_id);
+                uint32_t moved_hash_idx = eng->word_memory.hash_table ? eng->word_memory.hash_table[moved_bucket] : ENGRAM_HASH_NONE;
+                while (moved_hash_idx != ENGRAM_HASH_NONE) {
+                    word_hash_entry_t *moved_entry = &eng->word_memory.entry_pool[moved_hash_idx];
+                    if (moved_entry->entry_idx == last_idx) {
+                        moved_entry->entry_idx = i;
+                        break;
+                    }
+                    moved_hash_idx = moved_entry->next;
+                }
+            }
+            eng->word_memory.count--;
             i--;
+        }
+    }
+}
+
+void word_memory_rebuild_hash(engram_t *eng) {
+    if (!eng->word_memory.hash_table) return;
+    
+    for (uint32_t i = 0; i < ENGRAM_WORD_HASH_SIZE; i++) {
+        eng->word_memory.hash_table[i] = ENGRAM_HASH_NONE;
+    }
+    eng->word_memory.entry_pool_count = 0;
+    
+    for (uint32_t i = 0; i < eng->word_memory.count; i++) {
+        uint32_t neuron_id = eng->word_memory.entries[i].neuron_id;
+        uint32_t bucket = word_hash_bucket(neuron_id);
+        
+        uint32_t new_hash_idx = word_hash_alloc(eng);
+        if (new_hash_idx != ENGRAM_HASH_NONE) {
+            word_hash_entry_t *new_hash = &eng->word_memory.entry_pool[new_hash_idx];
+            new_hash->neuron_id = neuron_id;
+            new_hash->entry_idx = i;
+            new_hash->next = eng->word_memory.hash_table[bucket];
+            eng->word_memory.hash_table[bucket] = new_hash_idx;
         }
     }
 }

@@ -1,6 +1,7 @@
 #include "../internal.h"
 #include "../core.h"
 #include "../system.h"
+#include "../processes.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -17,13 +18,23 @@ typedef struct file_header {
     uint64_t tick_count;
 } file_header_t;
 
+static void persistence_unlock_all(engram_t *eng) {
+    engram_mutex_unlock(&eng->structure_mutex);
+    for (int s = ENGRAM_SHARD_COUNT - 1; s >= 0; s--) {
+        engram_rwlock_unlock(&eng->shard_locks[s]);
+    }
+}
+
 int persistence_save(engram_t *eng, const char *path) {
     FILE *f = fopen(path, "wb");
     if (!f) {
         return -1;
     }
 
-    engram_mutex_lock(&eng->state_mutex);
+    for (int s = 0; s < ENGRAM_SHARD_COUNT; s++) {
+        engram_rwlock_rdlock(&eng->shard_locks[s]);
+    }
+    engram_mutex_lock(&eng->structure_mutex);
 
     file_header_t header = {
         .magic = ENGRAM_FILE_MAGIC,
@@ -36,7 +47,7 @@ int persistence_save(engram_t *eng, const char *path) {
     };
 
     if (fwrite(&header, sizeof(header), 1, f) != 1) {
-        engram_mutex_unlock(&eng->state_mutex);
+        persistence_unlock_all(eng);
         fclose(f);
         return -1;
     }
@@ -45,7 +56,7 @@ int persistence_save(engram_t *eng, const char *path) {
         engram_synapse_t *s = &eng->synapses.synapses[i];
         if (s->weight > 0.001f) {
             if (fwrite(s, sizeof(engram_synapse_t), 1, f) != 1) {
-                engram_mutex_unlock(&eng->state_mutex);
+                persistence_unlock_all(eng);
                 fclose(f);
                 return -1;
             }
@@ -56,27 +67,27 @@ int persistence_save(engram_t *eng, const char *path) {
         engram_pathway_t *p = pathway_get(eng, i);
         if (p) {
             if (fwrite(&p->neuron_count, sizeof(uint32_t), 1, f) != 1) {
-                engram_mutex_unlock(&eng->state_mutex);
+                persistence_unlock_all(eng);
                 fclose(f);
                 return -1;
             }
             if (fwrite(p->neuron_ids, sizeof(uint32_t), p->neuron_count, f) != p->neuron_count) {
-                engram_mutex_unlock(&eng->state_mutex);
+                persistence_unlock_all(eng);
                 fclose(f);
                 return -1;
             }
             if (fwrite(&p->strength, sizeof(float), 1, f) != 1) {
-                engram_mutex_unlock(&eng->state_mutex);
+                persistence_unlock_all(eng);
                 fclose(f);
                 return -1;
             }
             if (fwrite(&p->activation_count, sizeof(uint32_t), 1, f) != 1) {
-                engram_mutex_unlock(&eng->state_mutex);
+                persistence_unlock_all(eng);
                 fclose(f);
                 return -1;
             }
             if (fwrite(&p->content_hash, sizeof(uint64_t), 1, f) != 1) {
-                engram_mutex_unlock(&eng->state_mutex);
+                persistence_unlock_all(eng);
                 fclose(f);
                 return -1;
             }
@@ -86,7 +97,7 @@ int persistence_save(engram_t *eng, const char *path) {
     for (uint32_t i = 0; i < eng->word_memory.count; i++) {
         word_memory_entry_t *e = &eng->word_memory.entries[i];
         if (fwrite(e, sizeof(word_memory_entry_t), 1, f) != 1) {
-            engram_mutex_unlock(&eng->state_mutex);
+            persistence_unlock_all(eng);
             fclose(f);
             return -1;
         }
@@ -97,24 +108,24 @@ int persistence_save(engram_t *eng, const char *path) {
         if (n->outgoing_count > 0) {
             uint32_t id = i;
             if (fwrite(&id, sizeof(uint32_t), 1, f) != 1) {
-                engram_mutex_unlock(&eng->state_mutex);
+                persistence_unlock_all(eng);
                 fclose(f);
                 return -1;
             }
             if (fwrite(&n->outgoing_count, sizeof(uint16_t), 1, f) != 1) {
-                engram_mutex_unlock(&eng->state_mutex);
+                persistence_unlock_all(eng);
                 fclose(f);
                 return -1;
             }
             if (fwrite(n->outgoing_synapses, sizeof(uint32_t), n->outgoing_count, f) != n->outgoing_count) {
-                engram_mutex_unlock(&eng->state_mutex);
+                persistence_unlock_all(eng);
                 fclose(f);
                 return -1;
             }
         }
     }
 
-    engram_mutex_unlock(&eng->state_mutex);
+    persistence_unlock_all(eng);
     fclose(f);
     return 0;
 }
@@ -142,7 +153,7 @@ engram_t *persistence_load(const char *path, const engram_config_t *config) {
         return NULL;
     }
 
-    engram_mutex_lock(&eng->state_mutex);
+    engram_mutex_lock(&eng->structure_mutex);
 
     for (uint32_t i = 0; i < header.synapse_count; i++) {
         engram_synapse_t s;
@@ -226,6 +237,7 @@ engram_t *persistence_load(const char *path, const engram_config_t *config) {
                 eng->word_memory.entries[eng->word_memory.count++] = e;
             }
         }
+        word_memory_rebuild_hash(eng);
     }
 
     while (!feof(f)) {
@@ -258,7 +270,7 @@ engram_t *persistence_load(const char *path, const engram_config_t *config) {
 
     eng->brainstem.tick_count = header.tick_count;
 
-    engram_mutex_unlock(&eng->state_mutex);
+    engram_mutex_unlock(&eng->structure_mutex);
     fclose(f);
 
     return eng;

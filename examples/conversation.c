@@ -135,7 +135,7 @@ int main(void) {
     if (usable_mem > 4096) usable_mem = 4096;
     if (usable_mem < 512) usable_mem = 512;
     
-    uint32_t neuron_count = (uint32_t)(usable_mem * 500);
+    uint32_t neuron_count = (uint32_t)(usable_mem * 250);
     if (neuron_count > 2000000) neuron_count = 2000000;
     if (neuron_count < 100000) neuron_count = 100000;
     

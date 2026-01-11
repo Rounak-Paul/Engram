@@ -56,7 +56,7 @@ void *brainstem_thread_fn(void *arg) {
 
         engram_sleep_us(100);
 
-        if (engram_mutex_trylock(&eng->state_mutex) != 0) {
+        if (engram_mutex_trylock(&eng->structure_mutex) != 0) {
             engram_sleep_us(1000);
             continue;
         }
@@ -83,7 +83,7 @@ void *brainstem_thread_fn(void *arg) {
         eng->brainstem.ticks_since_arousal_change++;
         eng->brainstem.last_tick_time_ns = now;
 
-        engram_mutex_unlock(&eng->state_mutex);
+        engram_mutex_unlock(&eng->structure_mutex);
 
         tick_count_window++;
         uint64_t elapsed = now - window_start;
