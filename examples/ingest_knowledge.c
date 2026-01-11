@@ -4,9 +4,16 @@
 #include <string.h>
 #include <dirent.h>
 #include <sys/stat.h>
+#include <time.h>
 
 #define MAX_LINE_LEN 4096
 #define MAX_PATH_LEN 512
+
+typedef struct {
+    char **sentences;
+    size_t count;
+    size_t capacity;
+} sentence_batch_t;
 
 static char *read_file_content(const char *path, size_t *out_len) {
     FILE *f = fopen(path, "r");
@@ -42,36 +49,121 @@ static void teach(engram_t *brain, const char *text) {
     engram_stimulate(brain, &cue);
 }
 
-static void ingest_text(engram_t *brain, const char *text, const char *source) {
+static void batch_init(sentence_batch_t *batch, size_t initial_cap) {
+    batch->sentences = malloc(initial_cap * sizeof(char *));
+    if (!batch->sentences) {
+        fprintf(stderr, "Failed to allocate sentence batch\n");
+        exit(1);
+    }
+    batch->count = 0;
+    batch->capacity = initial_cap;
+}
+
+static void batch_add(sentence_batch_t *batch, const char *sentence) {
+    if (batch->count >= batch->capacity) {
+        size_t new_cap = batch->capacity * 2;
+        char **new_arr = realloc(batch->sentences, new_cap * sizeof(char *));
+        if (!new_arr) {
+            fprintf(stderr, "Failed to expand sentence batch\n");
+            exit(1);
+        }
+        batch->sentences = new_arr;
+        batch->capacity = new_cap;
+    }
+    batch->sentences[batch->count++] = strdup(sentence);
+}
+
+static void batch_free(sentence_batch_t *batch) {
+    for (size_t i = 0; i < batch->count; i++) {
+        free(batch->sentences[i]);
+    }
+    free(batch->sentences);
+    batch->sentences = NULL;
+    batch->count = 0;
+    batch->capacity = 0;
+}
+
+static void extract_sentences(const char *text, sentence_batch_t *batch) {
     char sentence[MAX_LINE_LEN];
-    int sentence_count = 0;
     const char *p = text;
     char *s = sentence;
+    char *limit = sentence + MAX_LINE_LEN - 2;
     
     while (*p) {
         if (*p == '.' || *p == '!' || *p == '?') {
-            *s++ = *p++;
+            if (s < limit) *s++ = *p;
+            p++;
             *s = '\0';
             
             if (strlen(sentence) > 10) {
-                teach(brain, sentence);
-                sentence_count++;
+                batch_add(batch, sentence);
             }
             s = sentence;
             
             while (*p && (*p == ' ' || *p == '\n' || *p == '\r' || *p == '\t'))
                 p++;
         } else if (*p == '\n' || *p == '\r') {
-            *s++ = ' ';
+            if (s < limit) *s++ = ' ';
             p++;
-        } else if ((s - sentence) < MAX_LINE_LEN - 2) {
-            *s++ = *p++;
         } else {
+            if (s < limit) *s++ = *p;
             p++;
         }
     }
+}
+
+static void ingest_batch(engram_t *brain, const char *text, const char *source, size_t file_size) {
+    sentence_batch_t batch;
+    size_t estimated = file_size / 50;
+    if (estimated < 1000) estimated = 1000;
+    batch_init(&batch, estimated);
     
-    printf("  Ingested %d sentences from %s\n", sentence_count, source);
+    printf("  [%s] %.1f KB\n", source, file_size / 1024.0);
+    fflush(stdout);
+    
+    extract_sentences(text, &batch);
+    
+    if (batch.count == 0) {
+        printf("  No sentences found.\n");
+        batch_free(&batch);
+        return;
+    }
+    
+    clock_t start_time = clock();
+    int bar_width = 40;
+    
+    for (size_t i = 0; i < batch.count; i++) {
+        teach(brain, batch.sentences[i]);
+        
+        if (i % 50 == 0 || i == batch.count - 1) {
+            double elapsed = (double)(clock() - start_time) / CLOCKS_PER_SEC;
+            if (elapsed < 0.001) elapsed = 0.001;
+            double rate = (i + 1) / elapsed;
+            int remaining_sec = (int)((batch.count - i - 1) / rate);
+            int percent = (int)(((i + 1) * 100) / batch.count);
+            int filled = (int)(((i + 1) * bar_width) / batch.count);
+            
+            fprintf(stderr, "\033[2K\r  [");
+            for (int b = 0; b < bar_width; b++) {
+                if (b < filled) fprintf(stderr, "█");
+                else fprintf(stderr, "░");
+            }
+            fprintf(stderr, "] %3d%% %5zu/%zu  %4.0f/s  ", percent, i + 1, batch.count, rate);
+            
+            if (remaining_sec >= 60) {
+                fprintf(stderr, "ETA %dm%02ds", remaining_sec / 60, remaining_sec % 60);
+            } else {
+                fprintf(stderr, "ETA %2ds", remaining_sec);
+            }
+        }
+    }
+    
+    double total_time = (double)(clock() - start_time) / CLOCKS_PER_SEC;
+    fprintf(stderr, "\033[2K\r  [");
+    for (int b = 0; b < bar_width; b++) fprintf(stderr, "█");
+    fprintf(stderr, "] 100%% %zu/%zu  %.0f/s  Done in %.1fs\n", batch.count, batch.count, batch.count / total_time, total_time);
+    
+    batch_free(&batch);
 }
 
 static void ingest_directory(engram_t *brain, const char *dir_path) {
@@ -95,7 +187,7 @@ static void ingest_directory(engram_t *brain, const char *dir_path) {
             size_t content_len;
             char *content = read_file_content(path, &content_len);
             if (content) {
-                ingest_text(brain, content, entry->d_name);
+                ingest_batch(brain, content, entry->d_name, content_len);
                 free(content);
                 file_count++;
             }
@@ -103,7 +195,7 @@ static void ingest_directory(engram_t *brain, const char *dir_path) {
     }
     
     closedir(dir);
-    printf("\nProcessed %d text files from %s\n", file_count, dir_path);
+    printf("\n=== Processed %d text files ===\n", file_count);
 }
 
 static const char *recall_memory(engram_t *brain, const char *query) {
