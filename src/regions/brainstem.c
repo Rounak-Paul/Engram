@@ -106,12 +106,23 @@ void *brainstem_thread_fn(void *arg) {
 }
 
 static void brainstem_tick_wake(engram_t *eng, uint64_t tick) {
-    (void)eng;
-    (void)tick;
+    neuron_process_active(eng, tick, 32);
+    
+    plasticity_apply(eng, tick);
+    
+    if (tick % 50 == 0) {
+        decay_step(eng, tick);
+    }
+    
+    if (tick % 500 == 0) {
+        synapse_prune_weak(eng, 0.005f);
+    }
 }
 
 static void brainstem_tick_drowsy(engram_t *eng, uint64_t tick) {
     neuron_process_active(eng, tick, 64);
+    
+    plasticity_apply(eng, tick);
 
     if (eng->brainstem.ticks_since_arousal_change % 10 == 0) {
         consolidation_step(eng, tick);

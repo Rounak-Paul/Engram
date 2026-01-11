@@ -131,6 +131,17 @@ typedef struct recall_buffer {
     size_t pattern_capacity;
 } recall_buffer_t;
 
+typedef struct lexicon_entry {
+    char word[32];
+    uint32_t primary_neuron;
+} lexicon_entry_t;
+
+typedef struct lexicon {
+    lexicon_entry_t *entries;
+    uint32_t capacity;
+    uint32_t count;
+} lexicon_t;
+
 struct engram {
     engram_config_t config;
     engram_allocator_t allocator;
@@ -151,6 +162,7 @@ struct engram {
     working_memory_t working_memory;
     recall_buffer_t recall_buffer;
     active_queue_t active_queue;
+    lexicon_t lexicon;
 
     engram_mutex_t state_mutex;
     uint64_t total_memory_bytes;

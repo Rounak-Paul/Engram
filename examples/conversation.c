@@ -150,19 +150,133 @@ int main(void) {
         return 1;
     }
     
-    printf("Brain ready.\n\n");
-    printf("This brain learns naturally through exposure.\n");
-    printf("Type statements to teach, questions to recall.\n\n");
+    printf("Loading knowledge base...\n");
+    
+    static const char *knowledge[] = {
+        "The sun is a star at the center of our solar system",
+        "The Earth orbits around the sun",
+        "The moon orbits around the Earth",
+        "Water is made of hydrogen and oxygen",
+        "Ice is frozen water",
+        "Steam is water vapor",
+        "Rain falls from clouds",
+        "Clouds are made of water droplets",
+        "The sky appears blue because of light scattering",
+        "Stars are massive balls of burning gas",
+        "The Milky Way is our galaxy",
+        "Galaxies contain billions of stars",
+        "Black holes have extremely strong gravity",
+        "Light travels at 300000 kilometers per second",
+        "Sound travels slower than light",
+        "Electricity flows through conductors",
+        "The heart pumps blood through the body",
+        "Blood carries oxygen to cells",
+        "Lungs take in oxygen from air",
+        "The brain controls the nervous system",
+        "Neurons transmit electrical signals",
+        "Memory is stored in neural connections",
+        "Sleep helps consolidate memories",
+        "Dreams occur during REM sleep",
+        "Plants produce oxygen through photosynthesis",
+        "Chlorophyll makes plants green",
+        "Trees produce wood",
+        "Forests are ecosystems",
+        "Animals depend on plants for food",
+        "DNA contains genetic information",
+        "Genes determine traits",
+        "Evolution occurs over generations",
+        "Fossils preserve ancient life",
+        "Dinosaurs went extinct 65 million years ago",
+        "The Earth is 4.5 billion years old",
+        "Continents drift over time",
+        "Earthquakes occur at fault lines",
+        "Volcanoes release magma",
+        "Mountains form from tectonic activity",
+        "Rivers flow to the ocean",
+        "Gravity pulls objects toward Earth",
+        "Mass determines gravitational force",
+        "Energy cannot be created or destroyed",
+        "Heat is a form of energy",
+        "Temperature measures heat",
+        "Atoms are building blocks of matter",
+        "Protons have positive charge",
+        "Electrons have negative charge",
+        "Oxygen is essential for breathing",
+        "Carbon is the basis of organic chemistry",
+        "Diamonds are made of carbon",
+        "Mathematics is the language of science",
+        "Computers process information",
+        "Binary uses zeros and ones",
+        "The internet connects computers worldwide",
+        "Artificial intelligence mimics human thinking",
+        "Neural networks are inspired by brains",
+        "Algorithms are step by step instructions",
+        "Paris is the capital of France",
+        "London is the capital of England",
+        "Tokyo is the capital of Japan",
+        "Beijing is the capital of China",
+        "Rome is the capital of Italy",
+        "Berlin is the capital of Germany",
+        "Washington DC is the capital of the United States",
+        "The Eiffel Tower is in Paris",
+        "The Colosseum is in Rome",
+        "The Great Wall is in China",
+        "The Pyramids are in Egypt",
+        "Shakespeare wrote plays and sonnets",
+        "Einstein developed the theory of relativity",
+        "Newton discovered gravity",
+        "Darwin proposed evolution by natural selection",
+        "Leonardo da Vinci was an artist and inventor",
+        "Mozart composed classical music",
+        "Beethoven was a deaf composer",
+        "Coffee contains caffeine",
+        "Tea is a popular beverage",
+        "Bread is made from flour",
+        "Rice feeds billions of people",
+        "Milk comes from mammals",
+        "Cheese is made from milk",
+        "Fruits contain seeds",
+        "Vegetables come from plants",
+        NULL
+    };
+    
+    int fact_count = 0;
+    for (int i = 0; knowledge[i] != NULL; i++) {
+        teach(knowledge[i]);
+        fact_count++;
+    }
+    
+    engram_stats_t stats;
+    engram_stats(brain, &stats);
+    printf("Loaded %d facts (%u synapses)\n\n", fact_count, stats.synapse_count);
+    
+    printf("Brain ready! Ask me anything.\n");
+    printf("Examples: sun, water, Paris, brain, DNA\n\n");
     printf("Commands: /stats, /sleep, /quit\n\n");
     printf("────────────────────────────────────────────────────────\n\n");
     
     char input[1024];
+    int interactive = isatty(fileno(stdin));
+    int switched_to_tty = 0;
     
     while (1) {
-        printf("You: ");
-        fflush(stdout);
+        if (interactive || switched_to_tty) {
+            printf("You: ");
+            fflush(stdout);
+        }
         
-        if (!fgets(input, sizeof(input), stdin)) break;
+        if (!fgets(input, sizeof(input), stdin)) {
+            if (!interactive && !switched_to_tty) {
+                FILE *tty = fopen("/dev/tty", "r");
+                if (tty) {
+                    stdin = tty;
+                    switched_to_tty = 1;
+                    printf("\n─── Loaded knowledge, now interactive ───\n\n");
+                    continue;
+                }
+            }
+            break;
+        }
         
         size_t len = strlen(input);
         while (len > 0 && (input[len-1] == '\n' || input[len-1] == '\r')) {

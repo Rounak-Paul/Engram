@@ -212,6 +212,10 @@ engram_t *engram_create(const engram_config_t *config) {
     eng->recall_buffer.pattern = NULL;
     eng->recall_buffer.pattern_capacity = 0;
 
+    eng->lexicon.entries = NULL;
+    eng->lexicon.capacity = 0;
+    eng->lexicon.count = 0;
+
     encoding_init();
     brainstem_start(eng);
 
@@ -230,6 +234,9 @@ void engram_destroy(engram_t *eng) {
     }
     if (eng->recall_buffer.pattern) {
         engram_free(eng, eng->recall_buffer.pattern);
+    }
+    if (eng->lexicon.entries) {
+        engram_free(eng, eng->lexicon.entries);
     }
 
     governor_destroy(eng);
@@ -258,10 +265,21 @@ int engram_stimulate(engram_t *eng, const engram_cue_t *cue) {
         return 0;
     }
 
+    if (cue->modality == ENGRAM_MODALITY_TEXT && cue->data && cue->size > 0) {
+        encoding_register_words(eng, (const char *)cue->data, cue->size);
+    }
+
     uint32_t neuron_ids[256];
     uint32_t count = 0;
-    if (encoding_cue_to_sdr(eng, cue, neuron_ids, &count, 256) != 0) {
-        return -1;
+    
+    if (cue->modality == ENGRAM_MODALITY_TEXT && cue->data && cue->size > 0) {
+        if (encoding_text_to_primary_neurons(eng, (const char *)cue->data, cue->size, neuron_ids, &count, 256) != 0) {
+            return -1;
+        }
+    } else {
+        if (encoding_cue_to_sdr(eng, cue, neuron_ids, &count, 256) != 0) {
+            return -1;
+        }
     }
 
     int retries = 50;
@@ -281,7 +299,7 @@ int engram_stimulate(engram_t *eng, const engram_cue_t *cue) {
 
     neuron_process_active(eng, tick, 128);
 
-    uint32_t synapse_limit = (count < 16) ? count : 16;
+    uint32_t synapse_limit = (count < 32) ? count : 32;
     for (uint32_t i = 0; i < synapse_limit; i++) {
         for (uint32_t j = i + 1; j < synapse_limit; j++) {
             uint32_t existing = synapse_find(eng, neuron_ids[i], neuron_ids[j]);
@@ -289,32 +307,30 @@ int engram_stimulate(engram_t *eng, const engram_cue_t *cue) {
                 engram_synapse_t *s = synapse_get(eng, existing);
                 if (s) {
                     s->weight += 0.1f * cue->intensity;
-                    if (s->weight > 2.0f) {
-                        s->weight = 2.0f;
-                    }
+                    if (s->weight > 2.0f) s->weight = 2.0f;
                     s->last_active_tick = (uint32_t)tick;
                 }
             } else {
                 synapse_create(eng, neuron_ids[i], neuron_ids[j], 0.2f * cue->intensity);
             }
+            
+            uint32_t reverse = synapse_find(eng, neuron_ids[j], neuron_ids[i]);
+            if (reverse != UINT32_MAX) {
+                engram_synapse_t *s = synapse_get(eng, reverse);
+                if (s) {
+                    s->weight += 0.1f * cue->intensity;
+                    if (s->weight > 2.0f) s->weight = 2.0f;
+                    s->last_active_tick = (uint32_t)tick;
+                }
+            } else {
+                synapse_create(eng, neuron_ids[j], neuron_ids[i], 0.2f * cue->intensity);
+            }
         }
     }
 
-    uint64_t content_hash = encoding_hash(cue->data, cue->size);
-    uint32_t existing_pathway = pathway_find_by_hash(eng, content_hash);
-    if (existing_pathway != UINT32_MAX) {
-        pathway_activate(eng, existing_pathway, tick);
-    } else {
-        existing_pathway = pathway_find_matching(eng, neuron_ids, count, 0.6f);
-        if (existing_pathway != UINT32_MAX) {
-            pathway_activate(eng, existing_pathway, tick);
-        } else if (count >= 3) {
-            pathway_create_with_data(eng, neuron_ids, count, tick,
-                                     cue->data, cue->size, cue->modality, content_hash);
-        }
+    if (count >= 3) {
+        pathway_create(eng, neuron_ids, count, tick);
     }
-
-    hippocampus_store_trace(eng, cue, neuron_ids, count, tick);
 
     engram_mutex_unlock(&eng->state_mutex);
     return 0;
@@ -327,13 +343,21 @@ int engram_recall(engram_t *eng, const engram_cue_t *cue, engram_recall_t *resul
 
     memset(result, 0, sizeof(engram_recall_t));
 
-    uint64_t cue_hash = encoding_hash(cue->data, cue->size);
+    uint32_t cue_neurons[256];
+    uint32_t cue_count = 0;
 
-    uint32_t neuron_ids[256];
-    uint32_t count = 0;
+    if (cue->modality == ENGRAM_MODALITY_TEXT && cue->data && cue->size > 0) {
+        if (encoding_text_to_primary_neurons(eng, (const char *)cue->data, cue->size, cue_neurons, &cue_count, 256) != 0) {
+            return -1;
+        }
+    } else {
+        if (encoding_cue_to_sdr(eng, cue, cue_neurons, &cue_count, 256) != 0) {
+            return -1;
+        }
+    }
 
-    if (encoding_cue_to_sdr(eng, cue, neuron_ids, &count, 256) != 0) {
-        return -1;
+    if (cue_count == 0) {
+        return 1;
     }
 
     int retries = 100;
@@ -345,98 +369,94 @@ int engram_recall(engram_t *eng, const engram_cue_t *cue, engram_recall_t *resul
         return -1;
     }
 
-    uint32_t pathway_id = pathway_find_by_hash(eng, cue_hash);
-
-    if (pathway_id == UINT32_MAX) {
-        pathway_id = neocortex_find_pathway(eng, neuron_ids, count);
+    for (uint32_t i = 0; i < cue_count; i++) {
+        neuron_stimulate(eng, cue_neurons[i], 1.0f);
     }
 
-    if (pathway_id == UINT32_MAX) {
-        pathway_id = pathway_find_matching(eng, neuron_ids, count, 0.1f);
-    }
+    neuron_process_active(eng, eng->brainstem.tick_count, 64);
 
-    if (pathway_id == UINT32_MAX) {
-        memory_trace_t *trace = hippocampus_find_by_pattern(eng, neuron_ids, count, 0.1f);
-        if (trace && trace->original_data) {
-            if (trace->original_size > eng->recall_buffer.data_capacity) {
-                void *new_buf = engram_realloc(eng, eng->recall_buffer.data, trace->original_size);
-                if (new_buf) {
-                    eng->recall_buffer.data = new_buf;
-                    eng->recall_buffer.data_capacity = trace->original_size;
+    uint32_t activated[256];
+    float activations[256];
+    uint32_t activated_count = 0;
+
+    for (uint32_t i = 0; i < cue_count && activated_count < 256; i++) {
+        engram_neuron_t *n = neuron_get(eng, cue_neurons[i]);
+        if (!n) continue;
+        
+        for (uint16_t j = 0; j < n->outgoing_count && activated_count < 256; j++) {
+            uint32_t syn_idx = n->outgoing_synapses[j];
+            engram_synapse_t *s = synapse_get(eng, syn_idx);
+            if (!s || s->weight < 0.1f) continue;
+            
+            s->weight += 0.02f;
+            if (s->weight > 2.0f) s->weight = 2.0f;
+            
+            uint32_t post_id = s->post_neuron_id;
+            engram_neuron_t *post = neuron_get(eng, post_id);
+            if (!post) continue;
+            
+            int found = 0;
+            for (uint32_t k = 0; k < activated_count; k++) {
+                if (activated[k] == post_id) {
+                    activations[k] += s->weight;
+                    found = 1;
+                    break;
                 }
             }
-            if (eng->recall_buffer.data && trace->original_size <= eng->recall_buffer.data_capacity) {
-                memcpy(eng->recall_buffer.data, trace->original_data, trace->original_size);
-                result->data = eng->recall_buffer.data;
-                result->data_size = trace->original_size;
+            if (!found && activated_count < 256) {
+                activated[activated_count] = post_id;
+                activations[activated_count] = s->weight;
+                activated_count++;
             }
-            result->confidence = trace->strength / 10.0f;
-            if (result->confidence > 1.0f) result->confidence = 1.0f;
-            result->familiarity = (float)trace->replay_count / 10.0f;
-            if (result->familiarity > 1.0f) result->familiarity = 1.0f;
-            result->modality = trace->modality;
-            result->pathway_id = UINT32_MAX;
-            result->age_ticks = (uint32_t)(eng->brainstem.tick_count - trace->created_tick);
-            engram_mutex_unlock(&eng->state_mutex);
-            return 0;
         }
+    }
 
+    for (uint32_t i = 0; i < activated_count - 1; i++) {
+        for (uint32_t j = i + 1; j < activated_count; j++) {
+            if (activations[j] > activations[i]) {
+                uint32_t tmp_id = activated[i];
+                float tmp_act = activations[i];
+                activated[i] = activated[j];
+                activations[i] = activations[j];
+                activated[j] = tmp_id;
+                activations[j] = tmp_act;
+            }
+        }
+    }
+
+    uint32_t top_count = activated_count < 32 ? activated_count : 32;
+    
+    if (1024 > eng->recall_buffer.data_capacity) {
+        void *new_buf = engram_realloc(eng, eng->recall_buffer.data, 1024);
+        if (new_buf) {
+            eng->recall_buffer.data = new_buf;
+            eng->recall_buffer.data_capacity = 1024;
+        }
+    }
+
+    if (eng->recall_buffer.data && top_count > 0) {
+        if (encoding_neurons_to_text(eng, activated, top_count, 
+                                      (char *)eng->recall_buffer.data, 
+                                      eng->recall_buffer.data_capacity) == 0) {
+            result->data = eng->recall_buffer.data;
+            result->data_size = strlen((char *)eng->recall_buffer.data) + 1;
+            result->confidence = activations[0] / 2.0f;
+            if (result->confidence > 1.0f) result->confidence = 1.0f;
+        }
+    }
+
+    if (result->data_size == 0) {
         engram_mutex_unlock(&eng->state_mutex);
         result->confidence = 0.0f;
         return 1;
     }
 
-    engram_pathway_t *p = pathway_get(eng, pathway_id);
-    if (!p) {
-        engram_mutex_unlock(&eng->state_mutex);
-        return -1;
-    }
+    result->modality = ENGRAM_MODALITY_TEXT;
+    result->pathway_id = UINT32_MAX;
+    result->age_ticks = 0;
 
-    pathway_activate(eng, pathway_id, eng->brainstem.tick_count);
-
-    if (p->original_data && p->original_size > 0) {
-        if (p->original_size > eng->recall_buffer.data_capacity) {
-            void *new_buf = engram_realloc(eng, eng->recall_buffer.data, p->original_size);
-            if (new_buf) {
-                eng->recall_buffer.data = new_buf;
-                eng->recall_buffer.data_capacity = p->original_size;
-            }
-        }
-        if (eng->recall_buffer.data && p->original_size <= eng->recall_buffer.data_capacity) {
-            memcpy(eng->recall_buffer.data, p->original_data, p->original_size);
-            result->data = eng->recall_buffer.data;
-            result->data_size = p->original_size;
-        }
-    }
-
-    size_t pattern_bytes = p->neuron_count * sizeof(float);
-    if (pattern_bytes > eng->recall_buffer.pattern_capacity) {
-        float *new_buf = engram_realloc(eng, eng->recall_buffer.pattern, pattern_bytes);
-        if (new_buf) {
-            eng->recall_buffer.pattern = new_buf;
-            eng->recall_buffer.pattern_capacity = pattern_bytes;
-        }
-    }
-    if (eng->recall_buffer.pattern && pattern_bytes <= eng->recall_buffer.pattern_capacity) {
-        for (uint32_t i = 0; i < p->neuron_count; i++) {
-            engram_neuron_t *n = neuron_get(eng, p->neuron_ids[i]);
-            eng->recall_buffer.pattern[i] = n ? n->activation : 0.0f;
-        }
-        result->pattern = eng->recall_buffer.pattern;
-        result->pattern_size = p->neuron_count;
-    }
-
-    result->confidence = p->strength / 10.0f;
-    if (result->confidence > 1.0f) {
-        result->confidence = 1.0f;
-    }
-    result->familiarity = (float)p->activation_count / 100.0f;
-    if (result->familiarity > 1.0f) {
-        result->familiarity = 1.0f;
-    }
-    result->pathway_id = pathway_id;
-    result->modality = p->modality;
-    result->age_ticks = (uint32_t)(eng->brainstem.tick_count - p->created_tick);
+    engram_mutex_unlock(&eng->state_mutex);
+    return 0;
 
     engram_mutex_unlock(&eng->state_mutex);
     return 0;
