@@ -565,6 +565,24 @@ int engram_recall(engram_t *eng, const engram_cue_t *cue, engram_recall_t *resul
             result->modality = ENGRAM_MODALITY_TEXT;
             result->pathway_id = UINT32_MAX;
             result->age_ticks = 0;
+            
+            uint64_t tick = eng->brainstem.tick_count;
+            uint32_t learn_limit = filtered_count < 8 ? filtered_count : 8;
+            for (uint32_t i = 0; i < cue_count && i < 8; i++) {
+                for (uint32_t j = 0; j < learn_limit; j++) {
+                    uint32_t existing = synapse_find(eng, cue_neurons[i], filtered[j]);
+                    if (existing != UINT32_MAX) {
+                        engram_synapse_t *s = synapse_get(eng, existing);
+                        if (s) {
+                            s->weight += 0.02f * filtered_act[j];
+                            if (s->weight > 2.0f) s->weight = 2.0f;
+                            s->last_active_tick = (uint32_t)tick;
+                        }
+                    } else if (filtered_act[j] > 0.3f) {
+                        synapse_create(eng, cue_neurons[i], filtered[j], 0.1f * filtered_act[j]);
+                    }
+                }
+            }
         }
     }
 
