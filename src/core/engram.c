@@ -425,6 +425,69 @@ int engram_recall(engram_t *eng, const engram_cue_t *cue, engram_recall_t *resul
             }
         }
     }
+    
+    float decay = 0.4f;
+    float threshold = 0.01f;
+    uint32_t spread_start = 0;
+    uint32_t spread_end = activated_count;
+    
+    while (spread_start < spread_end && activated_count < 200) {
+        uint32_t new_end = activated_count;
+        
+        for (uint32_t i = spread_start; i < spread_end && activated_count < 200; i++) {
+            float act = activations[i] * decay;
+            if (act < threshold) continue;
+            
+            engram_neuron_t *n = neuron_get(eng, activated[i]);
+            if (!n) continue;
+            
+            float specificity = 1.0f / (1.0f + (float)n->outgoing_count * 0.1f);
+            float spread_weight = act * specificity;
+            
+            if (spread_weight < threshold) continue;
+            
+            for (uint16_t j = 0; j < n->outgoing_count && activated_count < 200; j++) {
+                uint32_t syn_idx = n->outgoing_synapses[j];
+                engram_synapse_t *s = synapse_get(eng, syn_idx);
+                if (!s || s->weight < 0.15f) continue;
+                
+                uint32_t post_id = s->post_neuron_id;
+                
+                int is_cue = 0;
+                for (uint32_t k = 0; k < cue_count; k++) {
+                    if (cue_neurons[k] == post_id) {
+                        is_cue = 1;
+                        break;
+                    }
+                }
+                if (is_cue) continue;
+                
+                float contribution = s->weight * spread_weight;
+                
+                int found = 0;
+                for (uint32_t k = 0; k < activated_count; k++) {
+                    if (activated[k] == post_id) {
+                        activations[k] += contribution;
+                        cue_hits[k]++;
+                        found = 1;
+                        break;
+                    }
+                }
+                if (!found && contribution > threshold) {
+                    activated[activated_count] = post_id;
+                    activations[activated_count] = contribution;
+                    cue_hits[activated_count] = 1;
+                    activated_count++;
+                }
+            }
+        }
+        
+        spread_start = spread_end;
+        spread_end = new_end;
+        decay *= 0.6f;
+        
+        if (spread_start >= spread_end) break;
+    }
 
     for (uint32_t i = 0; i < activated_count; i++) {
         if (cue_hits[i] >= 2) {
@@ -466,7 +529,15 @@ int engram_recall(engram_t *eng, const engram_cue_t *cue, engram_recall_t *resul
     uint32_t filtered[48];
     float filtered_act[48];
     uint32_t filtered_count = 0;
-    float min_activation = 0.05f;
+    
+    float max_activation = 0.0f;
+    for (uint32_t i = 0; i < activated_count; i++) {
+        if (activations[i] > max_activation) {
+            max_activation = activations[i];
+        }
+    }
+    
+    float min_activation = max_activation * 0.1f;
     
     for (uint32_t i = 0; i < activated_count && filtered_count < 48; i++) {
         if (activations[i] < min_activation) break;

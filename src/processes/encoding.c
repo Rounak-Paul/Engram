@@ -155,8 +155,130 @@ static void normalize_text(const char *input, size_t size, char *output, size_t 
     *out_size = j;
 }
 
+static int is_vowel(char c) {
+    return c == 'a' || c == 'e' || c == 'i' || c == 'o' || c == 'u';
+}
+
+static int has_vowel(const char *s, size_t len) {
+    for (size_t i = 0; i < len; i++) {
+        if (is_vowel(s[i])) return 1;
+    }
+    return 0;
+}
+
+static int ends_with(const char *s, size_t len, const char *suffix, size_t slen) {
+    if (len < slen) return 0;
+    for (size_t i = 0; i < slen; i++) {
+        if (s[len - slen + i] != suffix[i]) return 0;
+    }
+    return 1;
+}
+
+static int measure(const char *s, size_t len) {
+    int m = 0;
+    size_t i = 0;
+    while (i < len && is_vowel(s[i])) i++;
+    while (i < len) {
+        while (i < len && !is_vowel(s[i])) i++;
+        if (i >= len) break;
+        m++;
+        while (i < len && is_vowel(s[i])) i++;
+    }
+    return m;
+}
+
+static size_t stem_word(const char *word, size_t len, char *out) {
+    if (len < 3) {
+        for (size_t i = 0; i < len; i++) out[i] = word[i];
+        return len;
+    }
+    
+    for (size_t i = 0; i < len; i++) out[i] = word[i];
+    
+    if (ends_with(out, len, "sses", 4)) { len -= 2; }
+    else if (ends_with(out, len, "ies", 3)) { out[len-3] = 'i'; len -= 2; }
+    else if (ends_with(out, len, "ss", 2)) { }
+    else if (len > 2 && out[len-1] == 's') { len--; }
+    
+    if (ends_with(out, len, "eed", 3)) {
+        if (measure(out, len - 3) > 0) len--;
+    }
+    else if (ends_with(out, len, "ed", 2) && has_vowel(out, len - 2)) {
+        len -= 2;
+        if (ends_with(out, len, "at", 2) || ends_with(out, len, "bl", 2) || ends_with(out, len, "iz", 2)) {
+            out[len++] = 'e';
+        }
+        else if (len > 2 && out[len-1] == out[len-2] && out[len-1] != 'l' && out[len-1] != 's' && out[len-1] != 'z') {
+            len--;
+        }
+    }
+    else if (ends_with(out, len, "ing", 3) && has_vowel(out, len - 3)) {
+        len -= 3;
+        if (ends_with(out, len, "at", 2) || ends_with(out, len, "bl", 2) || ends_with(out, len, "iz", 2)) {
+            out[len++] = 'e';
+        }
+        else if (len > 2 && out[len-1] == out[len-2] && out[len-1] != 'l' && out[len-1] != 's' && out[len-1] != 'z') {
+            len--;
+        }
+    }
+    
+    if (ends_with(out, len, "y", 1) && len > 2 && has_vowel(out, len - 1)) {
+        out[len-1] = 'i';
+    }
+    
+    if (len > 7 && measure(out, len - 7) > 0) {
+        if (ends_with(out, len, "ational", 7)) { len -= 5; out[len-2] = 'e'; }
+        else if (ends_with(out, len, "ization", 7)) { len -= 5; out[len-2] = 'e'; }
+        else if (ends_with(out, len, "iveness", 7)) { len -= 4; }
+        else if (ends_with(out, len, "fulness", 7)) { len -= 4; }
+        else if (ends_with(out, len, "ousness", 7)) { len -= 4; }
+    }
+    if (len > 6 && measure(out, len - 6) > 0) {
+        if (ends_with(out, len, "tional", 6)) { len -= 2; }
+    }
+    if (len > 5 && measure(out, len - 5) > 0) {
+        if (ends_with(out, len, "ation", 5)) { len -= 3; out[len-2] = 'e'; }
+    }
+    if (len > 4 && measure(out, len - 4) > 0) {
+        if (ends_with(out, len, "ness", 4)) { len -= 4; }
+        else if (ends_with(out, len, "ment", 4)) { len -= 4; }
+        else if (ends_with(out, len, "able", 4)) { len -= 4; }
+        else if (ends_with(out, len, "ible", 4)) { len -= 4; }
+    }
+    if (len > 3 && measure(out, len - 3) > 0) {
+        if (ends_with(out, len, "ful", 3)) { len -= 3; }
+        else if (ends_with(out, len, "ive", 3)) { len -= 3; }
+        else if (ends_with(out, len, "ize", 3)) { len -= 3; }
+        else if (ends_with(out, len, "ous", 3)) { len -= 3; }
+        else if (ends_with(out, len, "ent", 3)) { len -= 3; }
+        else if (ends_with(out, len, "ant", 3)) { len -= 3; }
+        else if (ends_with(out, len, "ism", 3)) { len -= 3; }
+        else if (ends_with(out, len, "ist", 3)) { len -= 3; }
+        else if (ends_with(out, len, "ity", 3)) { len -= 3; }
+        else if (ends_with(out, len, "ify", 3)) { len -= 3; }
+        else if (ends_with(out, len, "ion", 3) && len > 4 && (out[len-4] == 's' || out[len-4] == 't')) { len -= 3; }
+    }
+    if (len > 2 && measure(out, len - 2) > 0) {
+        if (ends_with(out, len, "al", 2)) { len -= 2; }
+        else if (ends_with(out, len, "er", 2)) { len -= 2; }
+        else if (ends_with(out, len, "ic", 2)) { len -= 2; }
+        else if (ends_with(out, len, "ly", 2)) { len -= 2; }
+    }
+    
+    if (len > 1 && measure(out, len - 1) > 1 && ends_with(out, len, "e", 1)) {
+        len--;
+    }
+    
+    if (len < 2) len = 2;
+    
+    return len;
+}
+
 static uint32_t word_to_primary_neuron(engram_t *eng, const char *word, size_t len) {
-    uint64_t word_hash = fnv1a_hash(word, len);
+    char stemmed[64];
+    size_t stem_len = stem_word(word, len, stemmed);
+    
+    uint64_t word_hash = fnv1a_hash(stemmed, stem_len);
     uint64_t h = fnv1a_hash_seeded(&word_hash, sizeof(word_hash), 0);
     return (uint32_t)(h % eng->neurons.count);
 }
@@ -249,11 +371,15 @@ void word_memory_learn(engram_t *eng, const char *text, size_t size, uint32_t ti
                         eng->word_memory.capacity = new_cap;
                     }
                     
+                    char stemmed[64];
+                    size_t stem_len = stem_word(&normalized[word_start], word_len, stemmed);
+                    if (stem_len > 31) stem_len = 31;
+                    
                     word_memory_entry_t *entry = &eng->word_memory.entries[eng->word_memory.count++];
-                    for (size_t k = 0; k < word_len; k++) {
-                        entry->token[k] = normalized[word_start + k];
+                    for (size_t k = 0; k < stem_len; k++) {
+                        entry->token[k] = stemmed[k];
                     }
-                    entry->token[word_len] = '\0';
+                    entry->token[stem_len] = '\0';
                     entry->neuron_id = neuron_id;
                     entry->strength = 0.5f;
                     entry->last_seen_tick = tick;
