@@ -224,6 +224,11 @@ engram_t *engram_create(const engram_config_t *config) {
         return NULL;
     }
 
+    eng->recall_buffer.data = NULL;
+    eng->recall_buffer.data_capacity = 0;
+    eng->recall_buffer.pattern = NULL;
+    eng->recall_buffer.pattern_capacity = 0;
+
     encoding_init();
     brainstem_start(eng);
 
@@ -236,6 +241,13 @@ void engram_destroy(engram_t *eng) {
     }
 
     brainstem_stop(eng);
+
+    if (eng->recall_buffer.data) {
+        engram_free(eng, eng->recall_buffer.data);
+    }
+    if (eng->recall_buffer.pattern) {
+        engram_free(eng, eng->recall_buffer.pattern);
+    }
 
     governor_destroy(eng);
     working_memory_destroy(eng);
@@ -293,9 +305,16 @@ int engram_recall(engram_t *eng, const engram_cue_t *cue, engram_recall_t *resul
     if (pathway_id == UINT32_MAX) {
         memory_trace_t *trace = hippocampus_find_by_pattern(eng, neuron_ids, count, 0.3f);
         if (trace && trace->original_data) {
-            result->data = engram_alloc(eng, trace->original_size);
-            if (result->data) {
-                memcpy(result->data, trace->original_data, trace->original_size);
+            if (trace->original_size > eng->recall_buffer.data_capacity) {
+                void *new_buf = engram_realloc(eng, eng->recall_buffer.data, trace->original_size);
+                if (new_buf) {
+                    eng->recall_buffer.data = new_buf;
+                    eng->recall_buffer.data_capacity = trace->original_size;
+                }
+            }
+            if (eng->recall_buffer.data && trace->original_size <= eng->recall_buffer.data_capacity) {
+                memcpy(eng->recall_buffer.data, trace->original_data, trace->original_size);
+                result->data = eng->recall_buffer.data;
                 result->data_size = trace->original_size;
             }
             result->confidence = trace->strength / 10.0f;
@@ -323,19 +342,34 @@ int engram_recall(engram_t *eng, const engram_cue_t *cue, engram_recall_t *resul
     pathway_activate(eng, pathway_id, eng->brainstem.tick_count);
 
     if (p->original_data && p->original_size > 0) {
-        result->data = engram_alloc(eng, p->original_size);
-        if (result->data) {
-            memcpy(result->data, p->original_data, p->original_size);
+        if (p->original_size > eng->recall_buffer.data_capacity) {
+            void *new_buf = engram_realloc(eng, eng->recall_buffer.data, p->original_size);
+            if (new_buf) {
+                eng->recall_buffer.data = new_buf;
+                eng->recall_buffer.data_capacity = p->original_size;
+            }
+        }
+        if (eng->recall_buffer.data && p->original_size <= eng->recall_buffer.data_capacity) {
+            memcpy(eng->recall_buffer.data, p->original_data, p->original_size);
+            result->data = eng->recall_buffer.data;
             result->data_size = p->original_size;
         }
     }
 
-    result->pattern = engram_alloc(eng, p->neuron_count * sizeof(float));
-    if (result->pattern) {
+    size_t pattern_bytes = p->neuron_count * sizeof(float);
+    if (pattern_bytes > eng->recall_buffer.pattern_capacity) {
+        float *new_buf = engram_realloc(eng, eng->recall_buffer.pattern, pattern_bytes);
+        if (new_buf) {
+            eng->recall_buffer.pattern = new_buf;
+            eng->recall_buffer.pattern_capacity = pattern_bytes;
+        }
+    }
+    if (eng->recall_buffer.pattern && pattern_bytes <= eng->recall_buffer.pattern_capacity) {
         for (uint32_t i = 0; i < p->neuron_count; i++) {
             engram_neuron_t *n = neuron_get(eng, p->neuron_ids[i]);
-            result->pattern[i] = n ? n->activation : 0.0f;
+            eng->recall_buffer.pattern[i] = n ? n->activation : 0.0f;
         }
+        result->pattern = eng->recall_buffer.pattern;
         result->pattern_size = p->neuron_count;
     }
 
@@ -353,20 +387,6 @@ int engram_recall(engram_t *eng, const engram_cue_t *cue, engram_recall_t *resul
 
     engram_mutex_unlock(&eng->state_mutex);
     return 0;
-}
-
-void engram_recall_free(engram_recall_t *result) {
-    if (!result) {
-        return;
-    }
-    if (result->data) {
-        free(result->data);
-        result->data = NULL;
-    }
-    if (result->pattern) {
-        free(result->pattern);
-        result->pattern = NULL;
-    }
 }
 
 int engram_associate(engram_t *eng, const engram_cue_t *cues, size_t count) {

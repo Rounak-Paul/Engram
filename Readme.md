@@ -215,9 +215,10 @@ void engram_destroy(engram_t *eng);
 ```c
 int engram_stimulate(engram_t *eng, const engram_cue_t *cue);
 int engram_recall(engram_t *eng, const engram_cue_t *cue, engram_recall_t *result);
-void engram_recall_free(engram_recall_t *result);
 int engram_associate(engram_t *eng, const engram_cue_t *cues, size_t count);
 ```
+
+**Note**: `engram_recall` uses internal buffers managed by the library. No cleanup is required - just use the result and move on. The data remains valid until the next `engram_recall` call on the same engram.
 
 ### Arousal Control
 
@@ -543,9 +544,11 @@ int main(void) {
 
     engram_recall_t result;
     if (engram_recall(brain, &query_cue, &result) == 0) {
+        if (result.data) {
+            printf("Recalled: %.*s\n", (int)result.data_size, (char *)result.data);
+        }
         printf("Confidence: %.2f, Familiarity: %.2f\n", 
                result.confidence, result.familiarity);
-        engram_recall_free(&result);
     }
 
     engram_stats_t stats;

@@ -62,7 +62,6 @@ int main(void) {
         printf("  Query '%s': ", queries[i]);
         if (status == 0) {
             printf("found pathway (confidence: %.2f)\n", result.confidence);
-            engram_recall_free(&result);
         } else {
             printf("no match found\n");
         }

@@ -90,7 +90,6 @@ int main(void) {
         if (status == 0) {
             printf("confidence=%.2f, familiarity=%.2f\n",
                    result.confidence, result.familiarity);
-            engram_recall_free(&result);
         } else {
             printf("no pattern found\n");
         }

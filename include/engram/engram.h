@@ -14,7 +14,6 @@ void engram_destroy(engram_t *eng);
 
 int engram_stimulate(engram_t *eng, const engram_cue_t *cue);
 int engram_recall(engram_t *eng, const engram_cue_t *cue, engram_recall_t *result);
-void engram_recall_free(engram_recall_t *result);
 int engram_associate(engram_t *eng, const engram_cue_t *cues, size_t count);
 
 int engram_set_arousal(engram_t *eng, engram_arousal_t state);

@@ -135,7 +135,6 @@ static void attempt_recall(engram_t *brain, const char *query) {
         printf("  Confidence: %.2f\n", result.confidence);
         printf("  Familiarity: %.2f\n", result.familiarity);
         printf("  Age: %u ticks\n", result.age_ticks);
-        engram_recall_free(&result);
     } else if (status == 1) {
         printf("  Result: No matching memory found\n");
     } else {

@@ -133,6 +133,13 @@ typedef struct governor {
     float throttle_factor;
 } governor_t;
 
+typedef struct recall_buffer {
+    void *data;
+    size_t data_capacity;
+    float *pattern;
+    size_t pattern_capacity;
+} recall_buffer_t;
+
 struct engram {
     engram_config_t config;
     engram_allocator_t allocator;
@@ -152,6 +159,7 @@ struct engram {
 
     working_memory_t working_memory;
     cue_queue_t cue_queue;
+    recall_buffer_t recall_buffer;
 
     engram_mutex_t state_mutex;
     uint64_t total_memory_bytes;

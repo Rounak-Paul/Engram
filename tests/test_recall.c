@@ -51,7 +51,6 @@ int main(void) {
     if (recall_result == 0) {
         printf("Recall succeeded: confidence=%.2f, familiarity=%.2f\n",
                result.confidence, result.familiarity);
-        engram_recall_free(&result);
     } else if (recall_result == 1) {
         printf("No matching memory found (expected for new brain)\n");
     }
