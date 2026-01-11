@@ -161,53 +161,6 @@ static uint32_t word_to_primary_neuron(engram_t *eng, const char *word, size_t l
     return (uint32_t)(h % eng->neurons.count);
 }
 
-static void lexicon_add_word(engram_t *eng, const char *word, size_t len, uint32_t primary_neuron) {
-    if (len == 0 || len > 31) return;
-    
-    for (uint32_t i = 0; i < eng->lexicon.count; i++) {
-        if (eng->lexicon.entries[i].primary_neuron == primary_neuron) {
-            return;
-        }
-    }
-    
-    if (eng->lexicon.count >= eng->lexicon.capacity) {
-        uint32_t new_cap = eng->lexicon.capacity == 0 ? 1024 : eng->lexicon.capacity * 2;
-        lexicon_entry_t *new_entries = engram_realloc(eng, eng->lexicon.entries, 
-                                                       new_cap * sizeof(lexicon_entry_t));
-        if (!new_entries) return;
-        eng->lexicon.entries = new_entries;
-        eng->lexicon.capacity = new_cap;
-    }
-    
-    lexicon_entry_t *entry = &eng->lexicon.entries[eng->lexicon.count++];
-    size_t copy_len = len < 31 ? len : 31;
-    for (size_t i = 0; i < copy_len; i++) {
-        entry->word[i] = word[i];
-    }
-    entry->word[copy_len] = '\0';
-    entry->primary_neuron = primary_neuron;
-}
-
-int encoding_register_words(engram_t *eng, const char *text, size_t size) {
-    char normalized[1024];
-    size_t norm_size = 0;
-    size_t input_size = size < 1023 ? size : 1023;
-    normalize_text(text, input_size, normalized, &norm_size);
-    
-    size_t word_start = 0;
-    for (size_t i = 0; i <= norm_size; i++) {
-        if (i == norm_size || normalized[i] == ' ') {
-            if (i > word_start) {
-                size_t word_len = i - word_start;
-                uint32_t primary = word_to_primary_neuron(eng, &normalized[word_start], word_len);
-                lexicon_add_word(eng, &normalized[word_start], word_len, primary);
-            }
-            word_start = i + 1;
-        }
-    }
-    return 0;
-}
-
 int encoding_text_to_primary_neurons(engram_t *eng, const char *text, size_t size, uint32_t *out_neuron_ids, uint32_t *out_count, uint32_t max_neurons) {
     char normalized[1024];
     size_t norm_size = 0;
@@ -239,35 +192,169 @@ int encoding_text_to_primary_neurons(engram_t *eng, const char *text, size_t siz
     return 0;
 }
 
-int encoding_neurons_to_text(engram_t *eng, uint32_t *neuron_ids, uint32_t count, char *out_buffer, size_t buffer_size) {
+float encoding_pattern_overlap(uint32_t *pattern_a, uint32_t count_a, uint32_t *pattern_b, uint32_t count_b) {
+    if (count_a == 0 || count_b == 0) return 0.0f;
+    
+    uint32_t matches = 0;
+    for (uint32_t i = 0; i < count_a; i++) {
+        for (uint32_t j = 0; j < count_b; j++) {
+            if (pattern_a[i] == pattern_b[j]) {
+                matches++;
+                break;
+            }
+        }
+    }
+    
+    uint32_t smaller = count_a < count_b ? count_a : count_b;
+    return (float)matches / (float)smaller;
+}
+
+void word_memory_learn(engram_t *eng, const char *text, size_t size, uint32_t tick) {
+    char normalized[1024];
+    size_t norm_size = 0;
+    size_t input_size = size < 1023 ? size : 1023;
+    normalize_text(text, input_size, normalized, &norm_size);
+    
+    size_t word_start = 0;
+    for (size_t i = 0; i <= norm_size; i++) {
+        if (i == norm_size || normalized[i] == ' ') {
+            if (i > word_start) {
+                size_t word_len = i - word_start;
+                if (word_len > 31) word_len = 31;
+                
+                uint32_t neuron_id = word_to_primary_neuron(eng, &normalized[word_start], word_len);
+                
+                int found = 0;
+                for (uint32_t j = 0; j < eng->word_memory.count; j++) {
+                    if (eng->word_memory.entries[j].neuron_id == neuron_id) {
+                        eng->word_memory.entries[j].strength += 0.1f;
+                        if (eng->word_memory.entries[j].strength > 2.0f) {
+                            eng->word_memory.entries[j].strength = 2.0f;
+                        }
+                        eng->word_memory.entries[j].last_seen_tick = tick;
+                        eng->word_memory.entries[j].exposure_count++;
+                        eng->word_memory.entries[j].connection_count++;
+                        found = 1;
+                        break;
+                    }
+                }
+                
+                if (!found) {
+                    if (eng->word_memory.count >= eng->word_memory.capacity) {
+                        uint32_t new_cap = eng->word_memory.capacity == 0 ? 2048 : eng->word_memory.capacity * 2;
+                        word_memory_entry_t *new_entries = engram_realloc(eng, eng->word_memory.entries,
+                                                                           new_cap * sizeof(word_memory_entry_t));
+                        if (!new_entries) continue;
+                        eng->word_memory.entries = new_entries;
+                        eng->word_memory.capacity = new_cap;
+                    }
+                    
+                    word_memory_entry_t *entry = &eng->word_memory.entries[eng->word_memory.count++];
+                    for (size_t k = 0; k < word_len; k++) {
+                        entry->token[k] = normalized[word_start + k];
+                    }
+                    entry->token[word_len] = '\0';
+                    entry->neuron_id = neuron_id;
+                    entry->strength = 0.5f;
+                    entry->last_seen_tick = tick;
+                    entry->exposure_count = 1;
+                    entry->connection_count = 1;
+                }
+            }
+            word_start = i + 1;
+        }
+    }
+}
+
+int word_memory_reconstruct(engram_t *eng, uint32_t *neuron_ids, uint32_t count, char *out_buffer, size_t buffer_size) {
     if (!out_buffer || buffer_size == 0) return -1;
     
     out_buffer[0] = '\0';
     size_t pos = 0;
     uint32_t words_found = 0;
     
-    for (uint32_t i = 0; i < count && pos < buffer_size - 1; i++) {
+    word_memory_entry_t *matches[48];
+    float scores[48];
+    uint32_t match_count = 0;
+    
+    for (uint32_t i = 0; i < count && match_count < 48; i++) {
         uint32_t neuron_id = neuron_ids[i];
         
-        for (uint32_t j = 0; j < eng->lexicon.count; j++) {
-            if (eng->lexicon.entries[j].primary_neuron == neuron_id) {
-                if (words_found > 0 && pos < buffer_size - 1) {
-                    out_buffer[pos++] = ' ';
+        for (uint32_t j = 0; j < eng->word_memory.count; j++) {
+            if (eng->word_memory.entries[j].neuron_id == neuron_id &&
+                eng->word_memory.entries[j].strength > 0.1f) {
+                
+                word_memory_entry_t *entry = &eng->word_memory.entries[j];
+                float score = entry->strength;
+                
+                int already_added = 0;
+                for (uint32_t k = 0; k < match_count; k++) {
+                    if (matches[k] == entry) {
+                        already_added = 1;
+                        break;
+                    }
                 }
                 
-                const char *word = eng->lexicon.entries[j].word;
-                size_t word_len = 0;
-                while (word[word_len] && pos + word_len < buffer_size - 1) {
-                    out_buffer[pos + word_len] = word[word_len];
-                    word_len++;
+                if (!already_added) {
+                    matches[match_count] = entry;
+                    scores[match_count] = score;
+                    match_count++;
                 }
-                pos += word_len;
-                words_found++;
                 break;
             }
         }
     }
     
+    for (uint32_t i = 0; i < match_count - 1; i++) {
+        for (uint32_t j = i + 1; j < match_count; j++) {
+            if (scores[j] > scores[i]) {
+                word_memory_entry_t *tmp = matches[i];
+                float tmp_score = scores[i];
+                matches[i] = matches[j];
+                scores[i] = scores[j];
+                matches[j] = tmp;
+                scores[j] = tmp_score;
+            }
+        }
+    }
+    
+    uint32_t max_words = match_count < 8 ? match_count : 8;
+    
+    for (uint32_t i = 0; i < max_words && pos < buffer_size - 1; i++) {
+        word_memory_entry_t *entry = matches[i];
+        
+        if (words_found > 0 && pos < buffer_size - 1) {
+            out_buffer[pos++] = ' ';
+        }
+        
+        const char *word = entry->token;
+        size_t word_len = 0;
+        while (word[word_len] && pos + word_len < buffer_size - 1) {
+            out_buffer[pos + word_len] = word[word_len];
+            word_len++;
+        }
+        pos += word_len;
+        words_found++;
+        
+        entry->strength += 0.05f;
+        if (entry->strength > 2.0f) entry->strength = 2.0f;
+    }
+    
     out_buffer[pos] = '\0';
     return words_found > 0 ? 0 : -1;
+}
+
+void word_memory_decay(engram_t *eng, uint32_t current_tick) {
+    float decay_rate = 0.001f;
+    
+    for (uint32_t i = 0; i < eng->word_memory.count; i++) {
+        uint32_t age = current_tick - eng->word_memory.entries[i].last_seen_tick;
+        float decay = decay_rate * (float)(age / 100);
+        eng->word_memory.entries[i].strength -= decay;
+        
+        if (eng->word_memory.entries[i].strength < 0.05f) {
+            eng->word_memory.entries[i] = eng->word_memory.entries[--eng->word_memory.count];
+            i--;
+        }
+    }
 }

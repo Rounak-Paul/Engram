@@ -31,9 +31,6 @@ void pathway_pool_destroy(engram_t *eng) {
         if (eng->pathways.pathways[i].neuron_ids) {
             engram_free(eng, eng->pathways.pathways[i].neuron_ids);
         }
-        if (eng->pathways.pathways[i].original_data) {
-            engram_free(eng, eng->pathways.pathways[i].original_data);
-        }
     }
     if (eng->pathways.pathways) {
         engram_free(eng, eng->pathways.pathways);
@@ -49,11 +46,11 @@ void pathway_pool_destroy(engram_t *eng) {
 }
 
 uint32_t pathway_create(engram_t *eng, uint32_t *neuron_ids, uint32_t count, uint64_t tick) {
-    return pathway_create_with_data(eng, neuron_ids, count, tick, NULL, 0, 0, 0);
+    return pathway_create_with_data(eng, neuron_ids, count, tick, 0, 0);
 }
 
 uint32_t pathway_create_with_data(engram_t *eng, uint32_t *neuron_ids, uint32_t count, uint64_t tick,
-                                  const void *data, size_t data_size, uint32_t modality, uint64_t content_hash) {
+                                  uint32_t modality, uint64_t content_hash) {
     if (eng->pathways.free_count == 0) {
         return UINT32_MAX;
     }
@@ -77,17 +74,6 @@ uint32_t pathway_create_with_data(engram_t *eng, uint32_t *neuron_ids, uint32_t 
     p->content_hash = content_hash;
     p->modality = modality;
 
-    if (data && data_size > 0) {
-        p->original_data = engram_alloc(eng, data_size);
-        if (p->original_data) {
-            memcpy(p->original_data, data, data_size);
-            p->original_size = data_size;
-        }
-    } else {
-        p->original_data = NULL;
-        p->original_size = 0;
-    }
-
     eng->pathways.count++;
     return idx;
 }
@@ -100,9 +86,6 @@ void pathway_destroy(engram_t *eng, uint32_t idx) {
     engram_pathway_t *p = &eng->pathways.pathways[idx];
     if (p->neuron_ids) {
         engram_free(eng, p->neuron_ids);
-    }
-    if (p->original_data) {
-        engram_free(eng, p->original_data);
     }
 
     memset(p, 0, sizeof(engram_pathway_t));

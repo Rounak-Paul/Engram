@@ -59,8 +59,6 @@ typedef struct engram_pathway {
     uint32_t last_active_tick;
     uint32_t created_tick;
     uint64_t content_hash;
-    void *original_data;
-    size_t original_size;
     uint32_t modality;
 } engram_pathway_t;
 

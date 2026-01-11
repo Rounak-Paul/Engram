@@ -29,7 +29,7 @@ int pathway_pool_init(engram_t *eng);
 void pathway_pool_destroy(engram_t *eng);
 uint32_t pathway_create(engram_t *eng, uint32_t *neuron_ids, uint32_t count, uint64_t tick);
 uint32_t pathway_create_with_data(engram_t *eng, uint32_t *neuron_ids, uint32_t count, uint64_t tick,
-                                  const void *data, size_t data_size, uint32_t modality, uint64_t content_hash);
+                                  uint32_t modality, uint64_t content_hash);
 void pathway_destroy(engram_t *eng, uint32_t idx);
 engram_pathway_t *pathway_get(engram_t *eng, uint32_t idx);
 void pathway_activate(engram_t *eng, uint32_t idx, uint64_t tick);

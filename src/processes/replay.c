@@ -51,7 +51,6 @@ void replay_step(engram_t *eng, uint64_t tick) {
             pathway_activate(eng, existing, tick);
         } else if (trace->neuron_count >= 3) {
             pathway_create_with_data(eng, trace->neuron_ids, trace->neuron_count, tick,
-                                     trace->original_data, trace->original_size,
                                      trace->modality, trace->content_hash);
         }
 

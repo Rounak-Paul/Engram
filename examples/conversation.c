@@ -51,7 +51,10 @@ static void teach(const char *text) {
         .modality = ENGRAM_MODALITY_TEXT,
         .flags = ENGRAM_CUE_FLAG_LEARN
     };
-    engram_stimulate(brain, &cue);
+    int ret = engram_stimulate(brain, &cue);
+    if (ret != 0) {
+        printf("[DEBUG: stimulate failed: %d]\n", ret);
+    }
 }
 
 static const char *recall_memory(const char *query) {
@@ -142,7 +145,7 @@ int main(void) {
     config.resource_limits.max_cpu_percent = 95.0f;
     config.resource_limits.max_memory_bytes = usable_mem * 1024 * 1024;
     config.hippocampus_capacity = 8192;
-    config.auto_arousal = 0;
+    config.auto_arousal = 1;
     
     brain = engram_create(&config);
     if (!brain) {
@@ -252,7 +255,7 @@ int main(void) {
     
     printf("Brain ready! Ask me anything.\n");
     printf("Examples: sun, water, Paris, brain, DNA\n\n");
-    printf("Commands: /stats, /sleep, /quit\n\n");
+    printf("Commands: /stats, /quit\n\n");
     printf("────────────────────────────────────────────────────────\n\n");
     
     char input[1024];
@@ -292,17 +295,6 @@ int main(void) {
         
         if (strcmp(input, "/stats") == 0) {
             print_stats();
-            continue;
-        }
-        
-        if (strcmp(input, "/sleep") == 0) {
-            printf("Consolidating...\n");
-            engram_set_arousal(brain, ENGRAM_AROUSAL_SLEEP);
-            sleep_ms(500);
-            engram_set_arousal(brain, ENGRAM_AROUSAL_REM);
-            sleep_ms(500);
-            engram_set_arousal(brain, ENGRAM_AROUSAL_WAKE);
-            printf("Done.\n\n");
             continue;
         }
         
