@@ -1,0 +1,41 @@
+A black hole is an astronomical body so compact that its gravity prevents anything, including light, from escaping. Albert Einstein's theory of general relativity predicts that a sufficiently compact mass will form a black hole. The boundary of no escape is called the event horizon. General relativity predicts that every black hole should have a central singularity, where the curvature of spacetime is infinite.
+
+Objects whose gravitational fields are too strong for light to escape were first considered in the 18th century by John Michell and Pierre-Simon Laplace. In 1916, Karl Schwarzschild found the first modern solution of general relativity that would characterize a black hole. The Schwarzschild metric is named after him.
+
+David Finkelstein, in 1958, first published the interpretation of black hole as a region of space from which nothing can escape. Black holes were long considered a mathematical curiosity until the 1960s when theoretical work showed they were a generic prediction of general relativity.
+
+A black hole is generally defined as a region of spacetime from which no information-carrying signals or objects can escape. Among astrophysicists, a black hole is a compact object with a mass larger than four solar masses.
+
+The no-hair theorem postulates that, once it achieves a stable condition after formation, a black hole has only three independent physical properties: mass, electric charge, and angular momentum. The simplest static black holes have mass but neither electric charge nor angular momentum. These are called Schwarzschild black holes.
+
+The event horizon seals an object's fate but produces no locally detectable change when crossed. Far away from the black hole, a particle can move in any direction. Very close to the event horizon, the light cone is bent towards the black hole with more possible directions going towards than away from the event horizon.
+
+While black holes are conceptually invisible sinks of all matter and light, in astronomical settings their enormous gravity alters the motion of all surrounding objects and pulls any nearby gas inwards at velocities approaching the speed of light, making the area around black holes the brightest objects in the universe.
+
+In 1974, Stephen Hawking predicted that black holes emit small amounts of thermal radiation at a temperature inversely proportional to the mass. This effect is known as Hawking radiation. By applying quantum field theory to black holes, Hawking determined that a black hole should continuously emit thermal blackbody radiation.
+
+Jacob Bekenstein theorized that black holes should have a finite entropy proportional to their surface area, and therefore should also have a temperature. If Hawking's theory is correct, then black holes are expected to shrink and evaporate over time as they lose mass by the emission of photons and other particles.
+
+Large black holes emit less radiation than small black holes. A stellar mass black hole would take longer than the age of the universe to evaporate.
+
+The Unruh effect predicts that an accelerating observer should detect a higher temperature of their surroundings than a nonaccelerating observer. This is in accordance with the equivalence principle.
+
+Gravitational waves from merging black holes were first detected by LIGO in 2015. The observation confirmed predictions of general relativity about gravitational waves. The 2017 Nobel Prize in Physics was awarded to Rainer Weiss, Kip Thorne, and Barry Barish for this discovery.
+
+The Event Horizon Telescope produced the first direct image of a black hole's shadow in 2019, showing the supermassive black hole at the center of the M87 galaxy. In 2022, they released an image of Sagittarius A*, the supermassive black hole at the center of the Milky Way.
+
+Roger Penrose received the 2020 Nobel Prize in Physics for showing how black holes could form and for his prediction of the cosmological Big Bang singularity.
+
+Sagittarius A* at the core of the Milky Way galaxy contains a supermassive black hole of about 4.3 million solar masses. Reinhard Genzel and Andrea Ghez shared the 2020 Nobel Prize for discovering this supermassive object.
+
+Black holes can form from the gravitational collapse of massive stars at the end of their life cycle. When a star exhausts its nuclear fuel, it may collapse under its own gravity. If the mass exceeds the Tolman-Oppenheimer-Volkoff limit, it will form a black hole.
+
+Stellar black holes have masses from a few to tens of solar masses. Supermassive black holes have masses from millions to billions of solar masses and are found at the centers of galaxies. Intermediate-mass black holes have masses between stellar and supermassive.
+
+The black hole information paradox arises from the combination of quantum mechanics and general relativity. Information that falls into a black hole appears to be lost when the black hole evaporates, which would violate quantum mechanics.
+
+John Wheeler coined the term black hole in 1967. Before that, these objects were called dark stars or frozen stars.
+
+Accretion disks form around black holes when matter spirals inward. Relativistic jets of particles can be ejected perpendicular to the disk at nearly the speed of light.
+
+The innermost stable circular orbit is the smallest circular orbit in which a particle can stably orbit a black hole. Inside this radius, any circular orbit becomes unstable.

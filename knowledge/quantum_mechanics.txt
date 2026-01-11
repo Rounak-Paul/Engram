@@ -1,0 +1,41 @@
+Quantum mechanics is the fundamental physical theory that describes the behavior of matter and of light at and below the scale of atoms. It is the foundation of all quantum physics, which includes quantum chemistry, quantum biology, quantum field theory, quantum technology, and quantum information science.
+
+Quantum mechanics allows the calculation of properties and behaviour of physical systems. It is typically applied to microscopic systems like molecules, atoms and subatomic particles. Predictions of quantum mechanics have been verified experimentally to an extremely high degree of accuracy. Quantum electrodynamics has been shown to agree with experiment to within 1 part in 10^12 when predicting the magnetic properties of an electron.
+
+A fundamental feature of the theory is that it usually cannot predict with certainty what will happen, but only gives probabilities. Mathematically, a probability is found by taking the square of the absolute value of a complex number, known as a probability amplitude. This is known as the Born rule, named after physicist Max Born.
+
+A quantum particle like an electron can be described by a wave function, which associates to each point in space a probability amplitude. Applying the Born rule to these amplitudes gives a probability density function for the position that the electron will be found to have when an experiment is performed to measure it.
+
+The Schrodinger equation relates the collection of probability amplitudes that pertain to one moment of time to the collection of probability amplitudes that pertain to another moment.
+
+The uncertainty principle says that no matter how a quantum particle is prepared or how carefully experiments upon it are arranged, it is impossible to have a precise prediction for a measurement of its position and also at the same time for a measurement of its momentum.
+
+Quantum interference is often illustrated with the double-slit experiment. A coherent light source like a laser beam illuminates a plate pierced by two parallel slits, and the light passing through creates an interference pattern on a screen behind. This happens even when particles pass through the slits one at a time.
+
+Quantum tunnelling is when a particle that goes up against a potential barrier can cross it, even if its kinetic energy is smaller than the maximum of the potential. In classical mechanics this particle would be trapped. Quantum tunnelling enables radioactive decay, nuclear fusion in stars, and applications such as scanning tunnelling microscopy, tunnel diode and tunnel field-effect transistor.
+
+Quantum entanglement is a quantum mechanical phenomenon in which the quantum states of two or more objects have to be described with reference to each other, even though the individual objects may be spatially separated. Quantum entanglement enables quantum computing and is part of quantum communication protocols, such as quantum key distribution and superdense coding.
+
+Bell's theorem demonstrates that broad classes of hidden-variable theories are incompatible with quantum physics. Many Bell tests have been performed and they have shown results incompatible with the constraints imposed by local hidden variables.
+
+Quantum mechanics was developed in the early decades of the 20th century, driven by the need to explain phenomena that could not be reconciled with classical physics, such as Max Planck's solution in 1900 to the black-body radiation problem, and the correspondence between energy and frequency in Albert Einstein's 1905 paper which explained the photoelectric effect.
+
+The photoelectric effect is the emission of electrons when electromagnetic radiation hits a material. Einstein proposed that light is absorbed in discrete packets of energy called photons, each with energy proportional to frequency. Planck proposed that energy is radiated and absorbed in discrete quanta.
+
+The correspondence principle states that the predictions of quantum mechanics reduce to those of classical mechanics in the regime of large quantum numbers.
+
+Quantum field theory combines classical field theory, special relativity and quantum mechanics. QED explains how light and matter interact. The Standard Model of particle physics describes electromagnetic interactions and the weak and strong nuclear interactions.
+
+String theory posits that the point-like particles of particle physics are replaced by one-dimensional objects called strings. String theory describes how these strings propagate through space and interact with each other. One of the vibrational states of the string corresponds to the graviton, a quantum mechanical particle that carries gravitational force.
+
+Loop quantum gravity describes quantum properties of gravity. It describes space as an extremely fine fabric woven of finite loops called spin networks. The evolution of a spin network over time is called a spin foam. The characteristic length scale of a spin foam is the Planck length, approximately 1.616 times 10^-35 meters.
+
+The Copenhagen interpretation says that the probabilistic nature of quantum mechanics is not a temporary feature which will eventually be replaced by a deterministic theory, but is instead a final renunciation of the classical idea of causality.
+
+Richard Feynman once said that nobody understands quantum mechanics. Steven Weinberg stated that there is no entirely satisfactory interpretation of quantum mechanics.
+
+The quantum harmonic oscillator describes the behavior of a mass on a spring. The energy levels are quantized and equally spaced, given by E = (n + 1/2) times h-bar times omega.
+
+The particle in a box model has a particle confined to a box with infinite potential walls. The general solutions of the Schrodinger equation are sine and cosine functions.
+
+A free particle has a Gaussian wave packet that spreads out over time. This illustrates the uncertainty principle: making the position spread smaller makes the momentum spread larger.
