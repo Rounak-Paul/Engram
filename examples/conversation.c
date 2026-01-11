@@ -41,6 +41,7 @@ static size_t get_available_memory_mb(void) {
 #endif
 
 static engram_t *brain = NULL;
+static engram_config_t config;
 
 static void teach(const char *text) {
     engram_cue_t cue = {
@@ -134,26 +135,33 @@ int main(void) {
     if (usable_mem > 4096) usable_mem = 4096;
     if (usable_mem < 512) usable_mem = 512;
     
-    uint32_t neuron_count = (uint32_t)(usable_mem * 500);
+    uint32_t neuron_count = (uint32_t)(usable_mem * 250);
     if (neuron_count > 2000000) neuron_count = 2000000;
     if (neuron_count < 100000) neuron_count = 100000;
     
     printf("Allocating %u neurons, using 95%% CPU...\n\n", neuron_count);
     
-    engram_config_t config = engram_config_performance();
+    config = engram_config_performance();
     config.neuron_count = neuron_count;
     config.resource_limits.max_cpu_percent = 95.0f;
     config.resource_limits.max_memory_bytes = usable_mem * 1024 * 1024;
     config.hippocampus_capacity = 8192;
     config.auto_arousal = 1;
     
-    brain = engram_create(&config);
-    if (!brain) {
-        fprintf(stderr, "Failed to create brain\n");
-        return 1;
-    }
+    brain = engram_load("brain.engram", &config);
+    if (brain) {
+        engram_stats_t stats;
+        engram_stats(brain, &stats);
+        printf("Loaded brain from brain.engram (%u synapses, %u pathways)\n\n", 
+               stats.synapse_count, stats.pathway_count);
+    } else {
+        brain = engram_create(&config);
+        if (!brain) {
+            fprintf(stderr, "Failed to create brain\n");
+            return 1;
+        }
     
-    printf("Loading knowledge base...\n");
+        printf("Loading knowledge base...\n");
     
     static const char *knowledge[] = {
         "The sun is a star at the center of our solar system",
@@ -244,18 +252,19 @@ int main(void) {
     };
     
     int fact_count = 0;
-    for (int i = 0; knowledge[i] != NULL; i++) {
-        teach(knowledge[i]);
-        fact_count++;
-    }
+        for (int i = 0; knowledge[i] != NULL; i++) {
+            teach(knowledge[i]);
+            fact_count++;
+        }
     
-    engram_stats_t stats;
-    engram_stats(brain, &stats);
-    printf("Loaded %d facts (%u synapses)\n\n", fact_count, stats.synapse_count);
+        engram_stats_t stats;
+        engram_stats(brain, &stats);
+        printf("Loaded %d facts (%u synapses)\n\n", fact_count, stats.synapse_count);
+    }
     
     printf("Brain ready! Ask me anything.\n");
     printf("Examples: sun, water, Paris, brain, DNA\n\n");
-    printf("Commands: /stats, /quit\n\n");
+    printf("Commands: /stats, /save [file], /load <file>, /quit\n\n");
     printf("────────────────────────────────────────────────────────\n\n");
     
     char input[1024];
@@ -289,12 +298,41 @@ int main(void) {
         if (len == 0) continue;
         
         if (strcmp(input, "/quit") == 0 || strcmp(input, "/exit") == 0) {
-            printf("\nGoodbye!\n");
+            if (engram_save(brain, "brain.engram") == 0) {
+                printf("\nBrain saved to brain.engram\n");
+            }
+            printf("Goodbye!\n");
             break;
         }
         
         if (strcmp(input, "/stats") == 0) {
             print_stats();
+            continue;
+        }
+        
+        if (strncmp(input, "/save", 5) == 0) {
+            const char *filename = "brain.engram";
+            if (len > 6 && input[5] == ' ') {
+                filename = input + 6;
+            }
+            if (engram_save(brain, filename) == 0) {
+                printf("Brain: Saved to %s\n\n", filename);
+            } else {
+                printf("Brain: Failed to save to %s\n\n", filename);
+            }
+            continue;
+        }
+        
+        if (strncmp(input, "/load ", 6) == 0) {
+            const char *filename = input + 6;
+            engram_t *loaded = engram_load(filename, &config);
+            if (loaded) {
+                engram_destroy(brain);
+                brain = loaded;
+                printf("Brain: Loaded from %s\n\n", filename);
+            } else {
+                printf("Brain: Failed to load from %s\n\n", filename);
+            }
             continue;
         }
         

@@ -13,6 +13,7 @@ float encoding_pattern_overlap(uint32_t *pattern_a, uint32_t count_a, uint32_t *
 void word_memory_learn(engram_t *eng, const char *text, size_t size, uint32_t tick);
 int word_memory_reconstruct(engram_t *eng, uint32_t *neuron_ids, uint32_t count, char *out_buffer, size_t buffer_size);
 void word_memory_decay(engram_t *eng, uint32_t current_tick);
+void word_memory_rebuild_hash(engram_t *eng);
 
 void plasticity_apply(engram_t *eng, uint64_t tick);
 void plasticity_stdp(engram_t *eng, uint32_t synapse_idx, int32_t timing_diff, float eligibility);

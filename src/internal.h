@@ -10,6 +10,15 @@
 #define ENGRAM_MAX_PATHWAYS 65536
 #define ENGRAM_SYNAPSE_POOL_BLOCK 4096
 #define ENGRAM_WORKING_MEMORY_DEFAULT 64
+#define ENGRAM_SYNAPSE_HASH_SIZE 65536
+#define ENGRAM_WORD_HASH_SIZE 16384
+#define ENGRAM_HASH_NONE UINT32_MAX
+
+typedef struct synapse_hash_entry {
+    uint64_t key;
+    uint32_t synapse_idx;
+    uint32_t next;
+} synapse_hash_entry_t;
 
 typedef struct synapse_pool {
     engram_synapse_t *synapses;
@@ -17,6 +26,11 @@ typedef struct synapse_pool {
     uint32_t count;
     uint32_t *free_list;
     uint32_t free_count;
+    engram_mutex_t alloc_mutex;
+    uint32_t *hash_table;
+    synapse_hash_entry_t *entry_pool;
+    uint32_t entry_pool_count;
+    uint32_t entry_pool_capacity;
 } synapse_pool_t;
 
 typedef struct neuron_pool {
@@ -140,10 +154,20 @@ typedef struct word_memory_entry {
     uint32_t connection_count;
 } word_memory_entry_t;
 
+typedef struct word_hash_entry {
+    uint32_t neuron_id;
+    uint32_t entry_idx;
+    uint32_t next;
+} word_hash_entry_t;
+
 typedef struct word_memory {
     word_memory_entry_t *entries;
     uint32_t capacity;
     uint32_t count;
+    uint32_t *hash_table;
+    word_hash_entry_t *entry_pool;
+    uint32_t entry_pool_count;
+    uint32_t entry_pool_capacity;
 } word_memory_t;
 
 struct engram {
@@ -168,6 +192,8 @@ struct engram {
     active_queue_t active_queue;
     word_memory_t word_memory;
 
+    engram_rwlock_t shard_locks[ENGRAM_SHARD_COUNT];
+    engram_mutex_t structure_mutex;
     engram_mutex_t state_mutex;
     uint64_t total_memory_bytes;
 };

@@ -87,7 +87,29 @@ engram_t *engram_create(const engram_config_t *config) {
         return NULL;
     }
 
+    if (engram_mutex_init(&eng->structure_mutex) != 0) {
+        engram_mutex_destroy(&eng->state_mutex);
+        alloc->free(eng, alloc->ctx);
+        return NULL;
+    }
+
+    for (int i = 0; i < ENGRAM_SHARD_COUNT; i++) {
+        if (engram_rwlock_init(&eng->shard_locks[i]) != 0) {
+            for (int j = 0; j < i; j++) {
+                engram_rwlock_destroy(&eng->shard_locks[j]);
+            }
+            engram_mutex_destroy(&eng->structure_mutex);
+            engram_mutex_destroy(&eng->state_mutex);
+            alloc->free(eng, alloc->ctx);
+            return NULL;
+        }
+    }
+
     if (neuron_pool_init(eng, config->neuron_count) != 0) {
+        for (int i = 0; i < ENGRAM_SHARD_COUNT; i++) {
+            engram_rwlock_destroy(&eng->shard_locks[i]);
+        }
+        engram_mutex_destroy(&eng->structure_mutex);
         engram_mutex_destroy(&eng->state_mutex);
         alloc->free(eng, alloc->ctx);
         return NULL;
@@ -216,6 +238,15 @@ engram_t *engram_create(const engram_config_t *config) {
     eng->word_memory.entries = NULL;
     eng->word_memory.capacity = 0;
     eng->word_memory.count = 0;
+    eng->word_memory.hash_table = engram_alloc(eng, ENGRAM_WORD_HASH_SIZE * sizeof(uint32_t));
+    if (eng->word_memory.hash_table) {
+        for (uint32_t i = 0; i < ENGRAM_WORD_HASH_SIZE; i++) {
+            eng->word_memory.hash_table[i] = ENGRAM_HASH_NONE;
+        }
+    }
+    eng->word_memory.entry_pool = engram_alloc(eng, 4096 * sizeof(word_hash_entry_t));
+    eng->word_memory.entry_pool_count = 0;
+    eng->word_memory.entry_pool_capacity = eng->word_memory.entry_pool ? 4096 : 0;
 
     encoding_init();
     brainstem_start(eng);
@@ -239,6 +270,12 @@ void engram_destroy(engram_t *eng) {
     if (eng->word_memory.entries) {
         engram_free(eng, eng->word_memory.entries);
     }
+    if (eng->word_memory.hash_table) {
+        engram_free(eng, eng->word_memory.hash_table);
+    }
+    if (eng->word_memory.entry_pool) {
+        engram_free(eng, eng->word_memory.entry_pool);
+    }
 
     governor_destroy(eng);
     working_memory_destroy(eng);
@@ -252,6 +289,10 @@ void engram_destroy(engram_t *eng) {
     synapse_pool_destroy(eng);
     neuron_pool_destroy(eng);
 
+    for (int i = 0; i < ENGRAM_SHARD_COUNT; i++) {
+        engram_rwlock_destroy(&eng->shard_locks[i]);
+    }
+    engram_mutex_destroy(&eng->structure_mutex);
     engram_mutex_destroy(&eng->state_mutex);
 
     eng->allocator.free(eng, eng->allocator.ctx);
@@ -279,17 +320,30 @@ int engram_stimulate(engram_t *eng, const engram_cue_t *cue) {
         }
     }
 
-    engram_mutex_lock(&eng->state_mutex);
+    uint8_t shards_needed[ENGRAM_SHARD_COUNT] = {0};
+    for (uint32_t i = 0; i < count; i++) {
+        shards_needed[engram_shard_for_neuron(neuron_ids[i])] = 1;
+    }
+
+    for (int s = 0; s < ENGRAM_SHARD_COUNT; s++) {
+        if (shards_needed[s]) {
+            engram_rwlock_wrlock(&eng->shard_locks[s]);
+        }
+    }
 
     uint64_t tick = eng->brainstem.tick_count;
 
     if (cue->modality == ENGRAM_MODALITY_TEXT && cue->data && cue->size > 0) {
+        engram_mutex_lock(&eng->structure_mutex);
         word_memory_learn(eng, (const char *)cue->data, cue->size, (uint32_t)tick);
+        engram_mutex_unlock(&eng->structure_mutex);
     }
 
     for (uint32_t i = 0; i < count; i++) {
         neuron_stimulate(eng, neuron_ids[i], cue->intensity);
     }
+
+    engram_mutex_lock(&eng->structure_mutex);
 
     uint32_t synapse_limit = (count < 32) ? count : 32;
     for (uint32_t i = 0; i < synapse_limit; i++) {
@@ -325,7 +379,14 @@ int engram_stimulate(engram_t *eng, const engram_cue_t *cue) {
         pathway_create_with_data(eng, neuron_ids, count, tick, cue->modality, content_hash);
     }
 
-    engram_mutex_unlock(&eng->state_mutex);
+    engram_mutex_unlock(&eng->structure_mutex);
+
+    for (int s = ENGRAM_SHARD_COUNT - 1; s >= 0; s--) {
+        if (shards_needed[s]) {
+            engram_rwlock_unlock(&eng->shard_locks[s]);
+        }
+    }
+
     return 0;
 }
 
@@ -353,7 +414,9 @@ int engram_recall(engram_t *eng, const engram_cue_t *cue, engram_recall_t *resul
         return 1;
     }
 
-    engram_mutex_lock(&eng->state_mutex);
+    for (int s = 0; s < ENGRAM_SHARD_COUNT; s++) {
+        engram_rwlock_rdlock(&eng->shard_locks[s]);
+    }
 
     float cue_weights[256];
     float max_cue_weight = 0.0f;
@@ -565,10 +628,30 @@ int engram_recall(engram_t *eng, const engram_cue_t *cue, engram_recall_t *resul
             result->modality = ENGRAM_MODALITY_TEXT;
             result->pathway_id = UINT32_MAX;
             result->age_ticks = 0;
+            
+            uint64_t tick = eng->brainstem.tick_count;
+            uint32_t learn_limit = filtered_count < 8 ? filtered_count : 8;
+            for (uint32_t i = 0; i < cue_count && i < 8; i++) {
+                for (uint32_t j = 0; j < learn_limit; j++) {
+                    uint32_t existing = synapse_find(eng, cue_neurons[i], filtered[j]);
+                    if (existing != UINT32_MAX) {
+                        engram_synapse_t *s = synapse_get(eng, existing);
+                        if (s) {
+                            s->weight += 0.02f * filtered_act[j];
+                            if (s->weight > 2.0f) s->weight = 2.0f;
+                            s->last_active_tick = (uint32_t)tick;
+                        }
+                    } else if (filtered_act[j] > 0.3f) {
+                        synapse_create(eng, cue_neurons[i], filtered[j], 0.1f * filtered_act[j]);
+                    }
+                }
+            }
         }
     }
 
-    engram_mutex_unlock(&eng->state_mutex);
+    for (int s = ENGRAM_SHARD_COUNT - 1; s >= 0; s--) {
+        engram_rwlock_unlock(&eng->shard_locks[s]);
+    }
     
     if (result->data_size == 0) {
         result->confidence = 0.0f;
@@ -601,7 +684,17 @@ int engram_associate(engram_t *eng, const engram_cue_t *cues, size_t count) {
         return -1;
     }
 
-    engram_mutex_lock(&eng->state_mutex);
+    uint8_t shards_needed[ENGRAM_SHARD_COUNT] = {0};
+    for (uint32_t i = 0; i < total; i++) {
+        shards_needed[engram_shard_for_neuron(all_neurons[i])] = 1;
+    }
+
+    for (int s = 0; s < ENGRAM_SHARD_COUNT; s++) {
+        if (shards_needed[s]) {
+            engram_rwlock_wrlock(&eng->shard_locks[s]);
+        }
+    }
+    engram_mutex_lock(&eng->structure_mutex);
 
     for (uint32_t i = 0; i < total - 1; i++) {
         for (uint32_t j = i + 1; j < total; j++) {
@@ -622,7 +715,12 @@ int engram_associate(engram_t *eng, const engram_cue_t *cues, size_t count) {
 
     pathway_create(eng, all_neurons, total, eng->brainstem.tick_count);
 
-    engram_mutex_unlock(&eng->state_mutex);
+    engram_mutex_unlock(&eng->structure_mutex);
+    for (int s = ENGRAM_SHARD_COUNT - 1; s >= 0; s--) {
+        if (shards_needed[s]) {
+            engram_rwlock_unlock(&eng->shard_locks[s]);
+        }
+    }
     return 0;
 }
 
@@ -692,7 +790,9 @@ void engram_stats(engram_t *eng, engram_stats_t *stats) {
 
     memset(stats, 0, sizeof(engram_stats_t));
 
-    engram_mutex_lock(&eng->state_mutex);
+    for (int s = 0; s < ENGRAM_SHARD_COUNT; s++) {
+        engram_rwlock_rdlock(&eng->shard_locks[s]);
+    }
 
     stats->tick_count = eng->brainstem.tick_count;
     stats->neuron_count = eng->neurons.count;
@@ -712,7 +812,9 @@ void engram_stats(engram_t *eng, engram_stats_t *stats) {
     stats->current_tick_rate = eng->brainstem.current_tick_rate;
     stats->arousal_state = arousal_get(eng);
 
-    engram_mutex_unlock(&eng->state_mutex);
+    for (int s = ENGRAM_SHARD_COUNT - 1; s >= 0; s--) {
+        engram_rwlock_unlock(&eng->shard_locks[s]);
+    }
 }
 
 size_t engram_pathway_count(engram_t *eng) {

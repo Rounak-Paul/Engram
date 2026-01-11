@@ -42,6 +42,26 @@ int engram_mutex_trylock(engram_mutex_t *mutex) {
     return pthread_mutex_trylock(&mutex->handle);
 }
 
+int engram_rwlock_init(engram_rwlock_t *lock) {
+    return pthread_rwlock_init(&lock->handle, NULL);
+}
+
+void engram_rwlock_destroy(engram_rwlock_t *lock) {
+    pthread_rwlock_destroy(&lock->handle);
+}
+
+void engram_rwlock_rdlock(engram_rwlock_t *lock) {
+    pthread_rwlock_rdlock(&lock->handle);
+}
+
+void engram_rwlock_wrlock(engram_rwlock_t *lock) {
+    pthread_rwlock_wrlock(&lock->handle);
+}
+
+void engram_rwlock_unlock(engram_rwlock_t *lock) {
+    pthread_rwlock_unlock(&lock->handle);
+}
+
 int engram_cond_init(engram_cond_t *cond) {
     return pthread_cond_init(&cond->handle, NULL);
 }

@@ -1,0 +1,41 @@
+Synthetic-aperture radar is an imaging radar mounted on a moving platform. SAR is a Doppler technique based on the fact that radar reflections from discrete objects in a passing radar beam field each have a minute Doppler shift relative to the antenna.
+
+Carl Wiley, working at Goodyear Arizona in 1951, suggested the principle that because each object in the radar beam has a slightly different speed relative to the antenna, each object will have its own doppler shift. A precise frequency analysis of the radar reflections will thus allow the construction of a detailed image.
+
+SAR is capable of high-resolution remote sensing, independent of flight altitude, and independent of weather, as SAR can select frequencies to avoid weather-caused signal attenuation. SAR has day and night imaging capability as illumination is provided by the SAR itself.
+
+SAR images have wide applications in remote sensing and mapping of surfaces of the Earth and other planets. The surface of Venus was imaged by the Magellan probe using SAR. Applications include topography mapping, ocean monitoring, ice monitoring, flood detection, oil spill detection, and land use classification.
+
+In order to realize the SAR concept, electromagnetic waves are transmitted sequentially, the echoes are collected and the system electronics digitizes and stores the data for subsequent processing. The well ordered combination of the received signals builds a virtual aperture that is much longer than the physical antenna width. That is the source of the term synthetic aperture.
+
+The range direction is perpendicular to the flight track and perpendicular to the azimuth direction, which is also known as the along-track direction because it is in line with the position of the object within the antenna's field of view.
+
+SAR algorithms model the scene as a set of point targets that do not interact with each other according to the Born approximation. SAR processing is the application of a matched filter to the raw data, for each pixel in the output image, where the matched filter coefficients are the response from a single isolated point target.
+
+Resolution in the range dimension of the image is accomplished by creating pulses which define very short time intervals, either by emitting short pulses or by using longer chirp pulses in which frequency varies with time within that bandwidth. The differing times at which echoes return allow points at different distances to be distinguished.
+
+Image resolution of SAR in its range coordinate is mainly proportional to the radio bandwidth of the pulse used. In the cross-range coordinate, the resolution is mainly proportional to the bandwidth of the Doppler shift of the signal returns within the beamwidth.
+
+SAR can accomplish resolution of items smaller than a millionth of the range, for example 30 centimeters at 300 kilometers.
+
+Stripmap mode SAR has the antenna stay in a fixed position. It may be orthogonal to the flight path, or it may be squinted slightly forward or backward. When the antenna aperture travels along the flight path, a signal is transmitted at a rate equal to the pulse repetition frequency.
+
+Spotlight mode SAR steers the beam to illuminate the same patch of ground over a longer period as the platform moves. This allows more data to be collected and higher azimuth resolution to be achieved.
+
+Polarimetry in SAR uses different polarization states of transmitted and received waves. The four-component scattering power model determines surface scattering power, double-bounce scattering power, volume scattering power, and helix scattering power.
+
+Interferometric SAR uses phase differences between multiple SAR images to detect ground surface deformation. This technique can measure elevation changes of millimeters after a minor earthquake or volcanic eruption.
+
+Ultra-wideband SAR uses very large bandwidth for rapid changes in modulation. A signal with a quick change in modulation can reveal the distance to the target better than a signal with only slow changes. UWB systems might use a bandwidth of about 1 GHz centered around 3 GHz.
+
+Doppler-beam sharpening uses Doppler filtering to improve azimuth resolution. Chirped pulse-compressed radars use frequency modulation to achieve fine range resolution.
+
+Combining the series of observations requires significant computational resources, usually using Fourier transform techniques. The high digital computing speed now available allows such processing to be done in near-real time on board a SAR aircraft. The result is a map of radar reflectivity, including both amplitude and phase.
+
+The amplitude information gives information about ground cover in much the same way that a black-and-white photo does. The phase information can sometimes allow certain additional features of targets to be recognized.
+
+Coherence speckle is random interference effects caused by phase differences between adjacent image pixels. This is similar to the graininess seen in laser-illuminated optical scenes. Speckle structure can be subdued at the expense of resolution.
+
+Objects in motion within a SAR scene alter the Doppler frequencies of the returns. Such objects appear in the image at locations offset in the across-range direction by amounts proportional to the range-direction component of their velocity.
+
+The core of both SAR and phased array techniques is that the distances radar waves travel to and back from each scene element consist of some integer number of wavelengths plus some fraction of a final wavelength. Those fractions cause differences between the phases of the re-radiation received at various SAR or array positions.

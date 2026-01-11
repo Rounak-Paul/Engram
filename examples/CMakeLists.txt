@@ -14,3 +14,6 @@ target_link_libraries(resource_limited PRIVATE engram)
 
 add_executable(conversation conversation.c)
 target_link_libraries(conversation PRIVATE engram)
+
+add_executable(ingest_knowledge ingest_knowledge.c)
+target_link_libraries(ingest_knowledge PRIVATE engram)

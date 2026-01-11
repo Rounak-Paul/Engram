@@ -1,0 +1,39 @@
+Radar is a system that uses radio waves to determine the distance, direction, and radial velocity of objects relative to the site. It is a radiodetermination method used to detect and track aircraft, ships, spacecraft, guided missiles, motor vehicles, weather formations and terrain.
+
+A radar system consists of a transmitter producing electromagnetic waves in the radio or microwave domain, a transmitting antenna, a receiving antenna and a receiver and processor to determine properties of the objects. Radio waves from the transmitter reflect off the objects and return to the receiver, giving information about the objects locations and speeds.
+
+Radar was developed secretly for military use by several nations in the period before and during World War II. Applications include air and terrestrial traffic control, radar astronomy, air-defense systems, anti-missile systems, marine radars to locate landmarks and other ships, aircraft anti-collision systems, ocean surveillance systems, outer space surveillance and rendezvous systems, meteorological precipitation monitoring, radar remote sensing, altimetry and flight control systems, guided missile target locating systems, and ground-penetrating radar for geological observations.
+
+In 1886, German physicist Heinrich Hertz showed that radio waves could be reflected from solid objects. In 1895, Alexander Popov developed an apparatus using a coherer tube for detecting distant lightning strikes. Christian Hulsmeyer obtained a British patent on 23 September 1904 for a full radar system called a telemobiloscope. It operated on a 50 cm wavelength and the pulsed radar signal was created via a spark-gap.
+
+In 1935, Watson-Watt was asked to judge recent reports of a German radio-based death ray and turned the request over to Wilkins. This revelation led to the Daventry Experiment of 26 February 1935, using a powerful BBC shortwave transmitter as the source.
+
+Meteorologists use radar to monitor precipitation and wind. It has become the primary tool for short-term weather forecasting and watching for severe weather such as thunderstorms, tornadoes, winter storms, and precipitation types. Geologists use specialized ground-penetrating radars to map the composition of Earth's crust. Police forces use radar guns to monitor vehicle speeds on the roads. Automotive radars are used for adaptive cruise control and emergency braking.
+
+A radar system has a transmitter that emits radio waves known as radar signals in predetermined directions. When these signals contact an object they are usually reflected or scattered in many directions, although some of them will be absorbed and penetrate into the target. Radar signals are reflected especially well by materials of considerable electrical conductivity such as most metals, seawater, and wet ground.
+
+The reflected radar signals captured by the receiving antenna are usually very weak. They can be strengthened by electronic amplifiers. More sophisticated methods of signal processing are also used in order to recover useful radar signals.
+
+The weak absorption of radio waves by the medium through which they pass is what enables radar sets to detect objects at relatively long ranges. Weather phenomena, such as fog, clouds, rain, falling snow, and sleet, that block visible light are usually transparent to radio waves.
+
+Radar relies on its own transmissions rather than light from the Sun or the Moon, or from electromagnetic waves emitted by the target objects themselves, such as infrared radiation. This process of directing artificial radio waves towards objects is called illumination.
+
+If electromagnetic waves travelling through one material meet another material, having a different dielectric constant or diamagnetic constant from the first, the waves will reflect or scatter from the boundary between the materials. This is particularly true for electrically conductive materials such as metal and carbon fibre, making radar well-suited to the detection of aircraft and ships.
+
+Radar waves scatter in a variety of ways depending on the size of the radio wave and the shape of the target. If the wavelength is much shorter than the target's size, the wave will bounce off in a way similar to the way light is reflected by a mirror. If the wavelength is much longer than the size of the target, the target may not be visible because of poor reflection. This is described by Rayleigh scattering.
+
+The power returning to the receiving antenna is given by the radar range equation. The received power declines as the fourth power of the range, which means that the received power from distant targets is relatively very small.
+
+The Doppler effect is used in many radar systems. Sea-based radar systems, semi-active radar homing, active radar homing, weather radar, military aircraft, and radar astronomy rely on the Doppler effect to enhance performance. This produces information about target velocity during the detection process.
+
+The Doppler frequency shift for active radar depends on transmit frequency, radial velocity, and the speed of light. Only the radial component of the velocity is relevant. When the reflector is moving at right angle to the radar beam, it has no relative velocity.
+
+Signal noise is an internal source of random variations in the signal, which is generated by all electronic components. Reflected signals decline rapidly as distance increases, so noise introduces a radar range limitation.
+
+Clutter refers to radio frequency echoes returned from targets which are uninteresting to radar operators. Such targets include man-made objects such as buildings and radar countermeasures such as chaff. Such targets also include natural objects such as ground, sea, and precipitation, hail spike, dust storms, animals especially birds, turbulence in the atmospheric circulation, and meteor trails.
+
+Distance measurement is based on the time-of-flight: transmit a short pulse of radio signal and measure the time it takes for the reflection to return. The distance is one-half the round trip time multiplied by the speed of the signal.
+
+Speed is the change in distance to an object with respect to time. If the transmitter's output is coherent, there is another effect that can be used to make almost instant speed measurements, known as the Doppler effect. Most modern radar systems use this principle in Doppler radar and pulse-Doppler radar systems.
+
+Radar configurations include bistatic radar, continuous-wave radar, Doppler radar, FM-CW radar, monopulse radar, passive radar, planar array radar, pulse-doppler, and synthetic-aperture radar.
