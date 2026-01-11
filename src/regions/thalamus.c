@@ -41,17 +41,3 @@ int thalamus_gate_cue(engram_t *eng, const engram_cue_t *cue) {
 
     return 1;
 }
-
-void thalamus_update_attention(engram_t *eng, uint32_t focus_cluster) {
-    eng->thalamus.focus_cluster_id = focus_cluster;
-}
-
-float thalamus_get_attention_boost(engram_t *eng, uint32_t cluster_id) {
-    if (eng->thalamus.focus_cluster_id == UINT32_MAX) {
-        return 1.0f;
-    }
-    if (cluster_id == eng->thalamus.focus_cluster_id) {
-        return 1.5f;
-    }
-    return 0.8f;
-}

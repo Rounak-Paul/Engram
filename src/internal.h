@@ -47,22 +47,13 @@ typedef struct working_memory {
     uint32_t count;
 } working_memory_t;
 
-typedef struct pending_cue {
-    void *data;
-    size_t size;
-    float intensity;
-    float salience;
-    uint32_t modality;
-    uint32_t flags;
-} pending_cue_t;
-
-typedef struct cue_queue {
-    pending_cue_t *cues;
+typedef struct active_queue {
+    uint32_t *neuron_ids;
     uint32_t capacity;
     uint32_t head;
     uint32_t tail;
-    engram_mutex_t mutex;
-} cue_queue_t;
+    uint32_t count;
+} active_queue_t;
 
 typedef struct memory_trace {
     uint64_t content_hash;
@@ -158,8 +149,8 @@ struct engram {
     memory_index_t memory_index;
 
     working_memory_t working_memory;
-    cue_queue_t cue_queue;
     recall_buffer_t recall_buffer;
+    active_queue_t active_queue;
 
     engram_mutex_t state_mutex;
     uint64_t total_memory_bytes;

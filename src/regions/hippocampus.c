@@ -41,15 +41,6 @@ void hippocampus_destroy(engram_t *eng) {
     eng->hippocampus.count = 0;
 }
 
-int hippocampus_encode(engram_t *eng, uint32_t *neuron_ids, uint32_t count, float strength, uint64_t tick) {
-    (void)eng;
-    (void)strength;
-    (void)tick;
-    (void)neuron_ids;
-    (void)count;
-    return 0;
-}
-
 int hippocampus_store_trace(engram_t *eng, const engram_cue_t *cue, uint32_t *neuron_ids, uint32_t count, uint64_t tick) {
     uint64_t content_hash = encoding_hash(cue->data, cue->size);
     
@@ -229,15 +220,4 @@ void hippocampus_mark_replayed(engram_t *eng, memory_trace_t *trace) {
     if (trace->strength > 10.0f) {
         trace->strength = 10.0f;
     }
-}
-
-void hippocampus_decay_traces(engram_t *eng, float decay_factor) {
-    for (uint32_t i = 0; i < eng->hippocampus.count; i++) {
-        eng->hippocampus.traces[i].strength *= (1.0f - decay_factor);
-    }
-}
-
-void hippocampus_clear_replayed(engram_t *eng, uint32_t count) {
-    (void)eng;
-    (void)count;
 }

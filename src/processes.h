@@ -21,14 +21,7 @@ int consolidation_check_pathway(engram_t *eng, uint32_t pathway_id);
 void replay_step(engram_t *eng, uint64_t tick);
 void replay_activate_trace(engram_t *eng, uint32_t *neuron_ids, uint32_t count, float intensity);
 
-int cue_queue_init(engram_t *eng);
-void cue_queue_destroy(engram_t *eng);
-int cue_queue_push(engram_t *eng, const engram_cue_t *cue);
-int cue_queue_process(engram_t *eng, uint64_t tick);
-
 int working_memory_init(engram_t *eng);
 void working_memory_destroy(engram_t *eng);
-void working_memory_add(engram_t *eng, uint32_t neuron_id, float activation);
-void working_memory_decay(engram_t *eng);
 
 #endif

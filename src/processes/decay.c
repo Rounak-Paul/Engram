@@ -35,21 +35,3 @@ void decay_activations(engram_t *eng, float dt) {
         neuron_update(eng, i, dt);
     }
 }
-
-void decay_pathways(engram_t *eng, float dt) {
-    float decay_amount = eng->config.decay_rate * dt * 0.1f;
-
-    for (uint32_t i = 0; i < eng->pathways.capacity; i++) {
-        engram_pathway_t *p = pathway_get(eng, i);
-        if (!p) {
-            continue;
-        }
-
-        uint64_t age = eng->brainstem.tick_count - p->last_active_tick;
-        if (age > 10000) {
-            pathway_decay(eng, i, decay_amount * 2.0f);
-        } else if (age > 1000) {
-            pathway_decay(eng, i, decay_amount);
-        }
-    }
-}

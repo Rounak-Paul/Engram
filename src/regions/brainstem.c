@@ -48,16 +48,22 @@ void *brainstem_thread_fn(void *arg) {
 
     while (atomic_load(&eng->brainstem.running)) {
         uint64_t now = engram_time_now_ns();
-        uint64_t tick = eng->brainstem.tick_count;
 
         if (!governor_permits_tick(eng)) {
-            engram_sleep_us(eng->governor.target_tick_interval_us * 2);
+            engram_sleep_us(5000);
             continue;
         }
 
-        engram_mutex_lock(&eng->state_mutex);
+        engram_sleep_us(100);
 
+        if (engram_mutex_trylock(&eng->state_mutex) != 0) {
+            engram_sleep_us(1000);
+            continue;
+        }
+
+        uint64_t tick = eng->brainstem.tick_count;
         engram_arousal_t state = atomic_load(&eng->brainstem.arousal_state);
+
         switch (state) {
             case ENGRAM_AROUSAL_WAKE:
                 brainstem_tick_wake(eng, tick);
@@ -93,38 +99,19 @@ void *brainstem_thread_fn(void *arg) {
 
         governor_update(eng);
 
-        uint64_t work_time = engram_time_now_ns() - now;
-        uint64_t target_ns = (uint64_t)eng->governor.target_tick_interval_us * 1000ULL;
-        if (work_time < target_ns) {
-            engram_sleep_us((uint32_t)((target_ns - work_time) / 1000ULL));
-        }
+        engram_sleep_us(1000);
     }
 
     return NULL;
 }
 
 static void brainstem_tick_wake(engram_t *eng, uint64_t tick) {
-    cue_queue_process(eng, tick);
-
-    for (uint32_t i = 0; i < eng->neurons.count; i++) {
-        engram_neuron_t *n = &eng->neurons.neurons[i];
-        if (n->activation >= n->threshold) {
-            neuron_fire(eng, i, tick);
-        }
-    }
-
-    cluster_propagate_all(eng, tick);
-    plasticity_apply(eng, tick);
-
-    for (uint32_t i = 0; i < eng->neurons.count; i++) {
-        neuron_update(eng, i, 1.0f);
-    }
+    (void)eng;
+    (void)tick;
 }
 
 static void brainstem_tick_drowsy(engram_t *eng, uint64_t tick) {
-    for (uint32_t i = 0; i < eng->neurons.count; i++) {
-        neuron_update(eng, i, 2.0f);
-    }
+    neuron_process_active(eng, tick, 64);
 
     if (eng->brainstem.ticks_since_arousal_change % 10 == 0) {
         consolidation_step(eng, tick);
@@ -153,6 +140,5 @@ static void brainstem_tick_rem(engram_t *eng, uint64_t tick) {
         }
     }
 
-    cluster_propagate_all(eng, tick);
-    plasticity_apply(eng, tick);
+    neuron_process_active(eng, tick, 128);
 }

@@ -13,6 +13,9 @@ typedef struct engram_neuron {
     float fatigue;
     uint32_t last_fired_tick;
     uint32_t fire_count;
+    uint32_t *outgoing_synapses;
+    uint16_t outgoing_count;
+    uint16_t outgoing_capacity;
     uint16_t cluster_id;
     uint8_t refractory_remaining;
     uint8_t flags;

@@ -138,18 +138,6 @@ void pathway_activate(engram_t *eng, uint32_t idx, uint64_t tick) {
     }
 }
 
-void pathway_decay(engram_t *eng, uint32_t idx, float amount) {
-    engram_pathway_t *p = pathway_get(eng, idx);
-    if (!p) {
-        return;
-    }
-
-    p->strength -= amount;
-    if (p->strength <= 0.0f) {
-        pathway_destroy(eng, idx);
-    }
-}
-
 uint32_t pathway_find_matching(engram_t *eng, uint32_t *neuron_ids, uint32_t count, float threshold) {
     float best_overlap = threshold;
     uint32_t best_idx = UINT32_MAX;

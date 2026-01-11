@@ -84,6 +84,21 @@ uint32_t synapse_create(engram_t *eng, uint32_t pre_id, uint32_t post_id, float 
     s->potentiation_count = 0;
     s->flags = ENGRAM_SYNAPSE_FLAG_NONE;
 
+    engram_neuron_t *pre = neuron_get(eng, pre_id);
+    if (pre) {
+        if (pre->outgoing_count >= pre->outgoing_capacity) {
+            uint16_t new_cap = pre->outgoing_capacity == 0 ? 8 : pre->outgoing_capacity * 2;
+            uint32_t *new_list = engram_realloc(eng, pre->outgoing_synapses, new_cap * sizeof(uint32_t));
+            if (new_list) {
+                pre->outgoing_synapses = new_list;
+                pre->outgoing_capacity = new_cap;
+            }
+        }
+        if (pre->outgoing_count < pre->outgoing_capacity) {
+            pre->outgoing_synapses[pre->outgoing_count++] = idx;
+        }
+    }
+
     eng->synapses.count++;
     return idx;
 }
@@ -93,7 +108,18 @@ void synapse_destroy(engram_t *eng, uint32_t idx) {
         return;
     }
 
-    memset(&eng->synapses.synapses[idx], 0, sizeof(engram_synapse_t));
+    engram_synapse_t *s = &eng->synapses.synapses[idx];
+    engram_neuron_t *pre = neuron_get(eng, s->pre_neuron_id);
+    if (pre && pre->outgoing_synapses) {
+        for (uint16_t i = 0; i < pre->outgoing_count; i++) {
+            if (pre->outgoing_synapses[i] == idx) {
+                pre->outgoing_synapses[i] = pre->outgoing_synapses[--pre->outgoing_count];
+                break;
+            }
+        }
+    }
+
+    memset(s, 0, sizeof(engram_synapse_t));
     eng->synapses.free_list[eng->synapses.free_count++] = idx;
     eng->synapses.count--;
 }
@@ -103,26 +129,6 @@ engram_synapse_t *synapse_get(engram_t *eng, uint32_t idx) {
         return NULL;
     }
     return &eng->synapses.synapses[idx];
-}
-
-void synapse_propagate(engram_t *eng, uint32_t idx, uint64_t tick) {
-    engram_synapse_t *s = synapse_get(eng, idx);
-    if (!s || s->weight < 0.001f) {
-        return;
-    }
-
-    engram_neuron_t *pre = neuron_get(eng, s->pre_neuron_id);
-    engram_neuron_t *post = neuron_get(eng, s->post_neuron_id);
-    if (!pre || !post) {
-        return;
-    }
-
-    if (pre->flags & ENGRAM_NEURON_FLAG_ACTIVE) {
-        float signal = pre->activation * s->weight;
-        neuron_stimulate(eng, s->post_neuron_id, signal);
-        s->last_active_tick = (uint32_t)tick;
-        s->eligibility_trace = 1.0f;
-    }
 }
 
 void synapse_update_eligibility(engram_t *eng, uint32_t idx, float dt) {

@@ -176,23 +176,7 @@ engram_t *engram_create(const engram_config_t *config) {
         return NULL;
     }
 
-    if (cue_queue_init(eng) != 0) {
-        neocortex_destroy(eng);
-        amygdala_destroy(eng);
-        hippocampus_destroy(eng);
-        thalamus_destroy(eng);
-        brainstem_destroy(eng);
-        pathway_pool_destroy(eng);
-        cluster_pool_destroy(eng);
-        synapse_pool_destroy(eng);
-        neuron_pool_destroy(eng);
-        engram_mutex_destroy(&eng->state_mutex);
-        alloc->free(eng, alloc->ctx);
-        return NULL;
-    }
-
     if (working_memory_init(eng) != 0) {
-        cue_queue_destroy(eng);
         neocortex_destroy(eng);
         amygdala_destroy(eng);
         hippocampus_destroy(eng);
@@ -209,7 +193,6 @@ engram_t *engram_create(const engram_config_t *config) {
 
     if (governor_init(eng) != 0) {
         working_memory_destroy(eng);
-        cue_queue_destroy(eng);
         neocortex_destroy(eng);
         amygdala_destroy(eng);
         hippocampus_destroy(eng);
@@ -251,7 +234,6 @@ void engram_destroy(engram_t *eng) {
 
     governor_destroy(eng);
     working_memory_destroy(eng);
-    cue_queue_destroy(eng);
     neocortex_destroy(eng);
     amygdala_destroy(eng);
     hippocampus_destroy(eng);
@@ -271,7 +253,71 @@ int engram_stimulate(engram_t *eng, const engram_cue_t *cue) {
     if (!eng || !cue) {
         return -1;
     }
-    return cue_queue_push(eng, cue);
+
+    if (!thalamus_gate_cue(eng, cue)) {
+        return 0;
+    }
+
+    uint32_t neuron_ids[256];
+    uint32_t count = 0;
+    if (encoding_cue_to_sdr(eng, cue, neuron_ids, &count, 256) != 0) {
+        return -1;
+    }
+
+    int retries = 50;
+    while (engram_mutex_trylock(&eng->state_mutex) != 0 && retries > 0) {
+        engram_sleep_us(500);
+        retries--;
+    }
+    if (retries == 0) {
+        return -1;
+    }
+
+    uint64_t tick = eng->brainstem.tick_count;
+
+    for (uint32_t i = 0; i < count; i++) {
+        neuron_stimulate(eng, neuron_ids[i], cue->intensity);
+    }
+
+    neuron_process_active(eng, tick, 128);
+
+    uint32_t synapse_limit = (count < 16) ? count : 16;
+    for (uint32_t i = 0; i < synapse_limit; i++) {
+        for (uint32_t j = i + 1; j < synapse_limit; j++) {
+            uint32_t existing = synapse_find(eng, neuron_ids[i], neuron_ids[j]);
+            if (existing != UINT32_MAX) {
+                engram_synapse_t *s = synapse_get(eng, existing);
+                if (s) {
+                    s->weight += 0.1f * cue->intensity;
+                    if (s->weight > 2.0f) {
+                        s->weight = 2.0f;
+                    }
+                    s->last_active_tick = (uint32_t)tick;
+                }
+            } else {
+                synapse_create(eng, neuron_ids[i], neuron_ids[j], 0.2f * cue->intensity);
+            }
+        }
+    }
+
+    uint64_t content_hash = encoding_hash(cue->data, cue->size);
+    uint32_t existing_pathway = pathway_find_by_hash(eng, content_hash);
+    if (existing_pathway != UINT32_MAX) {
+        pathway_activate(eng, existing_pathway, tick);
+    } else {
+        existing_pathway = pathway_find_matching(eng, neuron_ids, count, 0.6f);
+        if (existing_pathway != UINT32_MAX) {
+            pathway_activate(eng, existing_pathway, tick);
+        } else if (count >= 3) {
+            pathway_create_with_data(eng, neuron_ids, count, tick,
+                                     cue->data, cue->size, cue->modality, content_hash);
+        }
+    }
+
+    hippocampus_store_trace(eng, cue, neuron_ids, count, tick);
+
+    engram_mutex_unlock(&eng->state_mutex);
+    return 0;
 }
 
 int engram_recall(engram_t *eng, const engram_cue_t *cue, engram_recall_t *result) {
@@ -290,7 +336,14 @@ int engram_recall(engram_t *eng, const engram_cue_t *cue, engram_recall_t *resul
         return -1;
     }
 
-    engram_mutex_lock(&eng->state_mutex);
+    int retries = 100;
+    while (engram_mutex_trylock(&eng->state_mutex) != 0 && retries > 0) {
+        engram_sleep_us(1000);
+        retries--;
+    }
+    if (retries == 0) {
+        return -1;
+    }
 
     uint32_t pathway_id = pathway_find_by_hash(eng, cue_hash);
 
@@ -299,11 +352,11 @@ int engram_recall(engram_t *eng, const engram_cue_t *cue, engram_recall_t *resul
     }
 
     if (pathway_id == UINT32_MAX) {
-        pathway_id = pathway_find_matching(eng, neuron_ids, count, 0.3f);
+        pathway_id = pathway_find_matching(eng, neuron_ids, count, 0.1f);
     }
 
     if (pathway_id == UINT32_MAX) {
-        memory_trace_t *trace = hippocampus_find_by_pattern(eng, neuron_ids, count, 0.3f);
+        memory_trace_t *trace = hippocampus_find_by_pattern(eng, neuron_ids, count, 0.1f);
         if (trace && trace->original_data) {
             if (trace->original_size > eng->recall_buffer.data_capacity) {
                 void *new_buf = engram_realloc(eng, eng->recall_buffer.data, trace->original_size);
