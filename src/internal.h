@@ -35,6 +35,36 @@ struct synapse {
     uint64_t last_activation;
 };
 
+typedef struct synapse_index synapse_index_t;
+struct synapse_index {
+    uint32_t *buckets;
+    uint32_t *next;
+    size_t bucket_count;
+};
+
+typedef struct neuron_index neuron_index_t;
+struct neuron_index {
+    size_t *buckets;
+    size_t *next;
+    size_t bucket_count;
+};
+
+typedef struct content_entry content_entry_t;
+struct content_entry {
+    engram_id_t id;
+    char *text;
+};
+
+typedef struct content_map content_map_t;
+struct content_map {
+    content_entry_t *entries;
+    size_t count;
+    size_t capacity;
+    size_t *buckets;
+    size_t *next;
+    size_t bucket_count;
+};
+
 struct substrate {
     neuron_t *neurons;
     size_t neuron_count;
@@ -44,6 +74,8 @@ struct substrate {
     size_t synapse_capacity;
     engram_id_t next_id;
     uint64_t tick;
+    neuron_index_t neuron_idx;
+    synapse_index_t synapse_idx;
 };
 
 struct wernicke {
@@ -76,6 +108,8 @@ struct vulkan_ctx {
     VkDescriptorPool descriptor_pool;
     VkBuffer neuron_buffer;
     VkDeviceMemory neuron_memory;
+    VkBuffer query_buffer;
+    VkDeviceMemory query_memory;
     VkBuffer result_buffer;
     VkDeviceMemory result_memory;
     VkShaderModule similarity_shader;
@@ -83,9 +117,18 @@ struct vulkan_ctx {
     VkPipelineLayout similarity_layout;
     VkDescriptorSetLayout descriptor_layout;
     size_t buffer_capacity;
+    size_t synced_count;
     bool initialized;
 };
 #endif
+
+typedef struct response_buffer response_buffer_t;
+struct response_buffer {
+    engram_id_t ids[ENGRAM_MAX_ACTIVATIONS];
+    float relevance[ENGRAM_MAX_ACTIVATIONS];
+    float activations[ENGRAM_MAX_ACTIVATIONS];
+    const char *content[ENGRAM_MAX_ACTIVATIONS];
+};
 
 struct engram {
     engram_config_t config;
@@ -93,6 +136,8 @@ struct engram {
     wernicke_t wernicke;
     hippocampus_t hippocampus;
     cortex_t cortex;
+    content_map_t content_map;
+    response_buffer_t response_buf;
 #ifdef ENGRAM_VULKAN_ENABLED
     vulkan_ctx_t vulkan;
 #endif
@@ -102,8 +147,13 @@ struct engram {
 substrate_t substrate_create(size_t neuron_cap, size_t synapse_cap);
 void substrate_destroy(substrate_t *s);
 neuron_t *substrate_alloc_neuron(substrate_t *s);
+neuron_t *substrate_alloc_neuron_raw(substrate_t *s);
 synapse_t *substrate_alloc_synapse(substrate_t *s);
+synapse_t *substrate_alloc_synapse_raw(substrate_t *s);
+void substrate_rebuild_indices(substrate_t *s);
 neuron_t *substrate_find_neuron(substrate_t *s, engram_id_t id);
+synapse_t *substrate_find_synapse(substrate_t *s, engram_id_t src, engram_id_t dst);
+void substrate_for_each_synapse(substrate_t *s, engram_id_t src, void (*fn)(synapse_t*, void*), void *ctx);
 void substrate_decay(substrate_t *s, float rate);
 void substrate_prune(substrate_t *s, float threshold);
 
@@ -130,7 +180,7 @@ void propagate_learning(substrate_t *s, engram_id_t *active, size_t count, float
 vulkan_ctx_t vulkan_create(void);
 void vulkan_destroy(vulkan_ctx_t *v);
 bool vulkan_sync_neurons(vulkan_ctx_t *v, substrate_t *s);
-size_t vulkan_similarity_search(vulkan_ctx_t *v, const engram_vec_t query, 
+size_t vulkan_similarity_search(vulkan_ctx_t *v, substrate_t *s, const engram_vec_t query, 
                                  engram_id_t *results, float *scores, size_t max_results, float threshold);
 #endif
 

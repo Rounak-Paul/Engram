@@ -2,6 +2,22 @@
 #include <string.h>
 #include <math.h>
 
+typedef struct {
+    substrate_t *s;
+    float activation;
+    float decay;
+    size_t depth;
+} propagate_ctx_t;
+
+static void propagate_synapse(synapse_t *syn, void *ctx) {
+    propagate_ctx_t *p = ctx;
+    if (syn->weight > 0.01f) {
+        float propagated = p->activation * syn->weight * p->decay;
+        syn->last_activation = p->s->tick;
+        propagate_activation(p->s, syn->target, propagated, p->decay, p->depth - 1);
+    }
+}
+
 void propagate_activation(substrate_t *s, engram_id_t source, float activation, float decay, size_t depth) {
     if (depth == 0 || activation < 0.01f) return;
     
@@ -14,14 +30,8 @@ void propagate_activation(substrate_t *s, engram_id_t source, float activation, 
     src->access_count++;
     src->importance += activation * 0.1f;
     
-    for (size_t i = 0; i < s->synapse_count; i++) {
-        synapse_t *syn = &s->synapses[i];
-        if (syn->source == source && syn->weight > 0.01f) {
-            float propagated = activation * syn->weight * decay;
-            syn->last_activation = s->tick;
-            propagate_activation(s, syn->target, propagated, decay, depth - 1);
-        }
-    }
+    propagate_ctx_t ctx = { .s = s, .activation = activation, .decay = decay, .depth = depth };
+    substrate_for_each_synapse(s, source, propagate_synapse, &ctx);
 }
 
 void propagate_learning(substrate_t *s, engram_id_t *active, size_t count, float rate) {
@@ -30,32 +40,34 @@ void propagate_learning(substrate_t *s, engram_id_t *active, size_t count, float
             engram_id_t a = active[i];
             engram_id_t b = active[j];
             
-            synapse_t *existing = NULL;
-            for (size_t k = 0; k < s->synapse_count; k++) {
-                if ((s->synapses[k].source == a && s->synapses[k].target == b) ||
-                    (s->synapses[k].source == b && s->synapses[k].target == a)) {
-                    existing = &s->synapses[k];
-                    break;
-                }
-            }
+            synapse_t *existing = substrate_find_synapse(s, a, b);
+            if (!existing) existing = substrate_find_synapse(s, b, a);
             
             if (existing) {
                 existing->weight += rate * (1.0f - existing->weight);
                 existing->last_activation = s->tick;
             } else {
+                size_t syn_idx = s->synapse_count;
                 synapse_t *syn = substrate_alloc_synapse(s);
                 if (syn) {
                     syn->source = a;
                     syn->target = b;
                     syn->weight = rate;
                     syn->last_activation = s->tick;
+                    size_t bucket = (((uint64_t)a << 32) | b) % 65536;
+                    s->synapse_idx.next[syn_idx] = s->synapse_idx.buckets[bucket];
+                    s->synapse_idx.buckets[bucket] = (uint32_t)syn_idx;
                 }
+                syn_idx = s->synapse_count;
                 syn = substrate_alloc_synapse(s);
                 if (syn) {
                     syn->source = b;
                     syn->target = a;
                     syn->weight = rate;
                     syn->last_activation = s->tick;
+                    size_t bucket = (((uint64_t)b << 32) | a) % 65536;
+                    s->synapse_idx.next[syn_idx] = s->synapse_idx.buckets[bucket];
+                    s->synapse_idx.buckets[bucket] = (uint32_t)syn_idx;
                 }
             }
         }

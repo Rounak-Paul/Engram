@@ -7,6 +7,7 @@
 
 #define ENGRAM_VECTOR_DIM 256
 #define ENGRAM_MAX_ACTIVATIONS 64
+#define ENGRAM_MAX_CONTENT_LEN 4096
 
 typedef uint64_t engram_id_t;
 typedef float engram_vec_t[ENGRAM_VECTOR_DIM];
@@ -26,6 +27,8 @@ typedef struct {
 typedef struct {
     engram_id_t *ids;
     float *relevance;
+    float *activations;
+    const char **content;
     size_t count;
 } engram_response_t;
 
@@ -34,7 +37,8 @@ typedef enum {
     ENGRAM_ERR_MEMORY,
     ENGRAM_ERR_INVALID,
     ENGRAM_ERR_NOT_FOUND,
-    ENGRAM_ERR_GPU
+    ENGRAM_ERR_GPU,
+    ENGRAM_ERR_IO
 } engram_status_t;
 
 #endif

@@ -117,8 +117,21 @@ if(ENGRAM_ENABLE_VULKAN)
         target_link_libraries(engram PUBLIC ${Vulkan_LIBRARIES})
         target_sources(engram PRIVATE src/compute/vulkan_compute.c)
         
+        find_library(SHADERC_LIB shaderc_combined shaderc
+            PATHS 
+                "${VULKAN_SDK_PATH}/lib"
+                "/usr/local/lib"
+                "/opt/homebrew/lib"
+                "$ENV{VULKAN_SDK}/lib"
+        )
+        if(SHADERC_LIB)
+            target_link_libraries(engram PRIVATE ${SHADERC_LIB})
+            target_compile_definitions(engram PRIVATE ENGRAM_HAS_SHADERC)
+            message(STATUS "Shaderc enabled: ${SHADERC_LIB}")
+        endif()
+        
         if(APPLE)
-            target_link_libraries(engram PRIVATE "-framework Metal" "-framework IOSurface" "-framework QuartzCore")
+            target_link_libraries(engram PRIVATE "-framework Metal" "-framework IOSurface" "-framework QuartzCore" "-lc++")
         endif()
         
         message(STATUS "Vulkan enabled: ${Vulkan_LIBRARIES}")
