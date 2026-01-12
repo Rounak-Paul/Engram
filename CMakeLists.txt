@@ -5,17 +5,7 @@ set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-option(ENGRAM_BUILD_TESTS "Build test suite" ON)
-option(ENGRAM_BUILD_EXAMPLES "Build example programs" ON)
-option(ENGRAM_ENABLE_SIMD "Enable SIMD optimizations" ON)
 option(ENGRAM_ENABLE_VULKAN "Enable Vulkan compute" ON)
-
-if(ENGRAM_ENABLE_SIMD)
-    add_compile_definitions(ENGRAM_SIMD_ENABLED)
-    if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
-        add_compile_options(-march=native)
-    endif()
-endif()
 
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
     add_compile_options(-Wall -Wextra -Wpedantic)
@@ -32,28 +22,15 @@ endif()
 set(ENGRAM_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 set(ENGRAM_SOURCES
-    src/core/engram.c
+    src/engram.c
     src/core/substrate.c
-    src/core/synapse.c
-    src/core/pathway.c
+    src/core/propagate.c
+    src/regions/wernicke.c
     src/regions/hippocampus.c
     src/regions/cortex.c
-    src/regions/wernicke.c
-    src/processes/propagate.c
-    src/system/persistence.c
+    src/util/vector.c
     src/util/hash.c
-    src/util/random.c
 )
-
-if(WIN32)
-    list(APPEND ENGRAM_SOURCES
-        src/platform/thread_win32.c
-    )
-else()
-    list(APPEND ENGRAM_SOURCES
-        src/platform/thread_posix.c
-    )
-endif()
 
 add_library(engram STATIC ${ENGRAM_SOURCES})
 target_include_directories(engram PUBLIC ${ENGRAM_INCLUDE_DIR})
@@ -68,37 +45,89 @@ elseif(WIN32)
 endif()
 
 if(ENGRAM_ENABLE_VULKAN)
-    find_package(Vulkan)
-    if(Vulkan_FOUND)
-        find_library(SHADERC_LIB shaderc_combined HINTS ${Vulkan_INCLUDE_DIRS}/../lib /usr/local/lib)
-        if(SHADERC_LIB)
-            target_compile_definitions(engram PRIVATE ENGRAM_VULKAN_ENABLED)
-            target_link_libraries(engram PRIVATE Vulkan::Vulkan ${SHADERC_LIB})
-            if(APPLE)
-                target_link_libraries(engram PRIVATE "-lc++")
-            elseif(UNIX)
-                target_link_libraries(engram PRIVATE stdc++)
+    find_package(Vulkan QUIET)
+    
+    if(NOT Vulkan_FOUND)
+        if(DEFINED ENV{VULKAN_SDK})
+            set(VULKAN_SDK_PATH $ENV{VULKAN_SDK})
+        elseif(WIN32)
+            file(GLOB VULKAN_SDK_PATHS "C:/VulkanSDK/*")
+            if(VULKAN_SDK_PATHS)
+                list(GET VULKAN_SDK_PATHS -1 VULKAN_SDK_PATH)
             endif()
-            target_sources(engram PRIVATE
-                src/compute/vulkan_compute.c
+        elseif(APPLE)
+            set(VULKAN_SDK_SEARCH_PATHS
+                "$ENV{HOME}/VulkanSDK"
+                "/usr/local"
+                "/opt/homebrew"
             )
-            message(STATUS "Vulkan + shaderc enabled")
-        else()
-            message(STATUS "shaderc not found, building without GPU acceleration")
+            foreach(SEARCH_PATH ${VULKAN_SDK_SEARCH_PATHS})
+                if(EXISTS "${SEARCH_PATH}/include/vulkan/vulkan.h")
+                    set(VULKAN_SDK_PATH ${SEARCH_PATH})
+                    break()
+                endif()
+                file(GLOB VULKAN_VERSIONS "${SEARCH_PATH}/*/macOS")
+                if(VULKAN_VERSIONS)
+                    list(GET VULKAN_VERSIONS -1 VULKAN_SDK_PATH)
+                    break()
+                endif()
+            endforeach()
         endif()
+        
+        if(VULKAN_SDK_PATH)
+            if(WIN32)
+                set(Vulkan_INCLUDE_DIRS "${VULKAN_SDK_PATH}/Include")
+                if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+                    set(Vulkan_LIBRARIES "${VULKAN_SDK_PATH}/Lib/vulkan-1.lib")
+                else()
+                    set(Vulkan_LIBRARIES "${VULKAN_SDK_PATH}/Lib32/vulkan-1.lib")
+                endif()
+            elseif(APPLE)
+                set(Vulkan_INCLUDE_DIRS "${VULKAN_SDK_PATH}/include")
+                set(Vulkan_LIBRARIES "${VULKAN_SDK_PATH}/lib/libvulkan.dylib")
+                if(NOT EXISTS ${Vulkan_LIBRARIES})
+                    set(Vulkan_LIBRARIES "${VULKAN_SDK_PATH}/lib/libMoltenVK.dylib")
+                endif()
+            else()
+                set(Vulkan_INCLUDE_DIRS "${VULKAN_SDK_PATH}/include")
+                set(Vulkan_LIBRARIES "${VULKAN_SDK_PATH}/lib/libvulkan.so")
+            endif()
+            
+            if(EXISTS ${Vulkan_INCLUDE_DIRS} AND EXISTS ${Vulkan_LIBRARIES})
+                set(Vulkan_FOUND TRUE)
+            endif()
+        endif()
+    endif()
+    
+    if(NOT Vulkan_FOUND AND UNIX AND NOT APPLE)
+        find_path(Vulkan_INCLUDE_DIRS vulkan/vulkan.h
+            PATHS /usr/include /usr/local/include
+        )
+        find_library(Vulkan_LIBRARIES vulkan
+            PATHS /usr/lib /usr/lib64 /usr/local/lib
+        )
+        if(Vulkan_INCLUDE_DIRS AND Vulkan_LIBRARIES)
+            set(Vulkan_FOUND TRUE)
+        endif()
+    endif()
+    
+    if(Vulkan_FOUND)
+        target_compile_definitions(engram PUBLIC ENGRAM_VULKAN_ENABLED)
+        target_include_directories(engram PUBLIC ${Vulkan_INCLUDE_DIRS})
+        target_link_libraries(engram PUBLIC ${Vulkan_LIBRARIES})
+        target_sources(engram PRIVATE src/compute/vulkan_compute.c)
+        
+        if(APPLE)
+            target_link_libraries(engram PRIVATE "-framework Metal" "-framework IOSurface" "-framework QuartzCore")
+        endif()
+        
+        message(STATUS "Vulkan enabled: ${Vulkan_LIBRARIES}")
     else()
         message(STATUS "Vulkan not found, building without GPU acceleration")
     endif()
 endif()
 
-if(ENGRAM_BUILD_TESTS)
-    enable_testing()
-    add_subdirectory(tests)
-endif()
-
-if(ENGRAM_BUILD_EXAMPLES)
-    add_subdirectory(examples)
-endif()
+add_subdirectory(sandbox)
 
 install(TARGETS engram
     LIBRARY DESTINATION lib
