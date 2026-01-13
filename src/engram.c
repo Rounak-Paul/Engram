@@ -14,7 +14,6 @@
 
 engram_config_t engram_config_default(void) {
     return (engram_config_t){
-        .enable_gpu = true,
         .max_neurons = DEFAULT_MAX_NEURONS,
         .max_synapses = DEFAULT_MAX_SYNAPSES,
         .decay_rate = DEFAULT_DECAY_RATE,
@@ -63,10 +62,8 @@ engram_t *engram_create(const engram_config_t *config) {
     }
     
 #ifdef ENGRAM_VULKAN_ENABLED
-    if (e->config.enable_gpu) {
-        e->vulkan = vulkan_create();
-        e->gpu_available = e->vulkan.initialized;
-    }
+    e->vulkan = vulkan_create();
+    e->gpu_available = e->vulkan.initialized;
 #endif
     
     return e;
@@ -312,10 +309,6 @@ engram_response_t engram_cue(engram_t *e, const char *input) {
 const char *engram_get_content(engram_t *e, engram_id_t id) {
     if (!e) return NULL;
     return content_map_find(&e->content_map, id);
-}
-
-bool engram_gpu_available(engram_t *e) {
-    return e ? e->gpu_available : false;
 }
 
 size_t engram_neuron_count(engram_t *e) {

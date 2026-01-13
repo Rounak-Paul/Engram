@@ -52,11 +52,10 @@ static void print_progress(size_t current, size_t total, double elapsed_ms,
 }
 
 static void print_stats(engram_t *e) {
-    printf("\n┌─────────────────────────────────────────────────────┐\n");
-    printf("│  Neurons: %-8zu  Synapses: %-8zu  GPU: %-8s │\n",
-           engram_neuron_count(e), engram_synapse_count(e),
-           engram_gpu_available(e) ? "enabled" : "disabled");
-    printf("└─────────────────────────────────────────────────────┘\n");
+    printf("\n┌───────────────────────────────────────┐\n");
+    printf("│  Neurons: %-10zu  Synapses: %-10zu│\n",
+           engram_neuron_count(e), engram_synapse_count(e));
+    printf("└───────────────────────────────────────┘\n");
 }
 
 static long get_file_size(const char *path) {

@@ -15,7 +15,6 @@ typedef float engram_vec_t[ENGRAM_VECTOR_DIM];
 typedef struct engram engram_t;
 
 typedef struct {
-    bool enable_gpu;
     size_t max_neurons;
     size_t max_synapses;
     float decay_rate;
