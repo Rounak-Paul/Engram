@@ -318,12 +318,38 @@ const char *engram_get_content(engram_t *e, engram_id_t id) {
     return content_map_find(&e->content_map, id);
 }
 
-size_t engram_neuron_count(engram_t *e) {
-    return e ? e->substrate.neuron_count : 0;
-}
-
-size_t engram_synapse_count(engram_t *e) {
-    return e ? e->substrate.synapse_count : 0;
+engram_stats_t engram_stats(engram_t *e) {
+    engram_stats_t s = {0};
+    if (!e) return s;
+    
+    s.neuron_count = e->substrate.neuron_count;
+    s.neuron_capacity = e->substrate.neuron_capacity;
+    s.synapse_count = e->substrate.synapse_count;
+    s.synapse_capacity = e->substrate.synapse_capacity;
+    s.content_count = e->content_map.count;
+    
+    s.memory_neurons = e->substrate.neuron_capacity * sizeof(neuron_t);
+    s.memory_synapses = e->substrate.synapse_capacity * sizeof(synapse_t);
+    
+    size_t content_mem = e->content_map.capacity * sizeof(content_entry_t);
+    content_mem += e->content_map.bucket_count * sizeof(size_t);
+    content_mem += e->content_map.capacity * sizeof(size_t);
+    for (size_t i = 0; i < e->content_map.count; i++) {
+        if (e->content_map.entries[i].text) {
+            content_mem += strlen(e->content_map.entries[i].text) + 1;
+        }
+    }
+    s.memory_content = content_mem;
+    
+    s.memory_total = s.memory_neurons + s.memory_synapses + s.memory_content;
+    s.memory_total += e->substrate.neuron_idx.bucket_count * sizeof(size_t);
+    s.memory_total += e->substrate.neuron_capacity * sizeof(size_t);
+    s.memory_total += e->substrate.synapse_idx.bucket_count * sizeof(uint32_t);
+    s.memory_total += e->substrate.synapse_capacity * sizeof(uint32_t);
+    
+    s.device = e->gpu_available ? ENGRAM_DEVICE_VULKAN : ENGRAM_DEVICE_CPU;
+    
+    return s;
 }
 
 #define ENGRAM_FILE_MAGIC 0x454E4752414D0001ULL

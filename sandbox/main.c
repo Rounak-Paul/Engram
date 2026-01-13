@@ -65,10 +65,23 @@ static void print_progress(size_t current, size_t total, double elapsed_ms,
 }
 
 static void print_stats(engram_t *e) {
-    printf("\n┌───────────────────────────────────────┐\n");
-    printf("│  Neurons: %-10zu  Synapses: %-10zu│\n",
-           engram_neuron_count(e), engram_synapse_count(e));
-    printf("└───────────────────────────────────────┘\n");
+    engram_stats_t s = engram_stats(e);
+    const char *device = s.device == ENGRAM_DEVICE_VULKAN ? "Vulkan" : "CPU";
+    printf("\n┌─────────────────────────────────────────────────────┐\n");
+    printf("│  Device:   %-40s│\n", device);
+    printf("│  Neurons:  %-10zu / %-10zu  (%5.1f%%)          │\n", 
+           s.neuron_count, s.neuron_capacity, 
+           s.neuron_capacity ? 100.0 * s.neuron_count / s.neuron_capacity : 0);
+    printf("│  Synapses: %-10zu / %-10zu  (%5.1f%%)          │\n", 
+           s.synapse_count, s.synapse_capacity,
+           s.synapse_capacity ? 100.0 * s.synapse_count / s.synapse_capacity : 0);
+    printf("│  Content:  %-10zu entries                        │\n", s.content_count);
+    printf("│  Memory:   %-6.2f MB (N:%.1fM S:%.1fM C:%.1fM)         │\n",
+           s.memory_total / (1024.0 * 1024.0),
+           s.memory_neurons / (1024.0 * 1024.0),
+           s.memory_synapses / (1024.0 * 1024.0),
+           s.memory_content / (1024.0 * 1024.0));
+    printf("└─────────────────────────────────────────────────────┘\n");
 }
 
 static long get_file_size(const char *path) {
@@ -107,8 +120,9 @@ static int load_knowledge_file(engram_t *e, const char *path) {
             count++;
             paragraph[0] = '\0';
             para_len = 0;
+            engram_stats_t st = engram_stats(e);
             print_progress(bytes_read, file_size, get_time_ms() - start_time,
-                          engram_neuron_count(e), engram_synapse_count(e));
+                          st.neuron_count, st.synapse_count);
             continue;
         }
         
@@ -120,8 +134,9 @@ static int load_knowledge_file(engram_t *e, const char *path) {
             count++;
             strcpy(paragraph, line);
             para_len = len;
+            engram_stats_t st = engram_stats(e);
             print_progress(bytes_read, file_size, get_time_ms() - start_time,
-                          engram_neuron_count(e), engram_synapse_count(e));
+                          st.neuron_count, st.synapse_count);
         }
     }
     
@@ -134,8 +149,9 @@ static int load_knowledge_file(engram_t *e, const char *path) {
     char time_str[32];
     format_time(elapsed, time_str, sizeof(time_str));
     
+    engram_stats_t st = engram_stats(e);
     print_progress(file_size, file_size, get_time_ms() - start_time,
-                  engram_neuron_count(e), engram_synapse_count(e));
+                  st.neuron_count, st.synapse_count);
     printf("\n  └─ ✓ %d segments in %s\n", count, time_str);
     
     fclose(f);

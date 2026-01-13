@@ -40,4 +40,22 @@ typedef enum {
     ENGRAM_ERR_IO
 } engram_status_t;
 
+typedef enum {
+    ENGRAM_DEVICE_CPU,
+    ENGRAM_DEVICE_VULKAN
+} engram_device_t;
+
+typedef struct {
+    size_t neuron_count;
+    size_t neuron_capacity;
+    size_t synapse_count;
+    size_t synapse_capacity;
+    size_t content_count;
+    size_t memory_neurons;
+    size_t memory_synapses;
+    size_t memory_content;
+    size_t memory_total;
+    engram_device_t device;
+} engram_stats_t;
+
 #endif
