@@ -64,6 +64,13 @@ engram_t *engram_create(const engram_config_t *config) {
 #ifdef ENGRAM_VULKAN_ENABLED
     e->vulkan = vulkan_create();
     e->gpu_available = e->vulkan.initialized;
+    if (e->gpu_available) {
+        fprintf(stderr, "[engram] using Vulkan compute\n");
+    } else {
+        fprintf(stderr, "[engram] using CPU (Vulkan unavailable)\n");
+    }
+#else
+    fprintf(stderr, "[engram] using CPU\n");
 #endif
     
     return e;
