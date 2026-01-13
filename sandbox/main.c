@@ -2,18 +2,31 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <dirent.h>
 #include <sys/stat.h>
+
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#else
+#include <dirent.h>
 #include <sys/time.h>
+#endif
 
 #define MAX_INPUT 4096
 #define ENGRAM_FILE "engram.dat"
 #define PROGRESS_WIDTH 50
 
 static double get_time_ms(void) {
+#ifdef _WIN32
+    LARGE_INTEGER freq, count;
+    QueryPerformanceFrequency(&freq);
+    QueryPerformanceCounter(&count);
+    return (double)count.QuadPart * 1000.0 / (double)freq.QuadPart;
+#else
     struct timeval tv;
     gettimeofday(&tv, NULL);
     return tv.tv_sec * 1000.0 + tv.tv_usec / 1000.0;
+#endif
 }
 
 static void format_time(double seconds, char *buf, size_t len) {
@@ -131,6 +144,30 @@ static int load_knowledge_file(engram_t *e, const char *path) {
 }
 
 static int load_knowledge_dir(engram_t *e, const char *dirpath) {
+    char *files[256];
+    int file_count = 0;
+    char filepath[512];
+
+#ifdef _WIN32
+    WIN32_FIND_DATAA find_data;
+    char search_path[512];
+    snprintf(search_path, sizeof(search_path), "%s\\*.txt", dirpath);
+    
+    HANDLE hfind = FindFirstFileA(search_path, &find_data);
+    if (hfind == INVALID_HANDLE_VALUE) {
+        fprintf(stderr, "Cannot open directory: %s\n", dirpath);
+        return -1;
+    }
+    
+    do {
+        if (!(find_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
+            snprintf(filepath, sizeof(filepath), "%s\\%s", dirpath, find_data.cFileName);
+            files[file_count] = _strdup(filepath);
+            file_count++;
+        }
+    } while (FindNextFileA(hfind, &find_data) && file_count < 256);
+    FindClose(hfind);
+#else
     DIR *dir = opendir(dirpath);
     if (!dir) {
         fprintf(stderr, "Cannot open directory: %s\n", dirpath);
@@ -138,10 +175,6 @@ static int load_knowledge_dir(engram_t *e, const char *dirpath) {
     }
     
     struct dirent *entry;
-    char *files[256];
-    int file_count = 0;
-    char filepath[512];
-    
     while ((entry = readdir(dir)) != NULL && file_count < 256) {
         size_t len = strlen(entry->d_name);
         if (len > 4 && strcmp(entry->d_name + len - 4, ".txt") == 0) {
@@ -151,6 +184,7 @@ static int load_knowledge_dir(engram_t *e, const char *dirpath) {
         }
     }
     closedir(dir);
+#endif
     
     if (file_count == 0) {
         printf("No .txt files found in %s\n", dirpath);
