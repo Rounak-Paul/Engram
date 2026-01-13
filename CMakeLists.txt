@@ -25,6 +25,7 @@ set(ENGRAM_SOURCES
     src/engram.c
     src/core/substrate.c
     src/core/propagate.c
+    src/core/hnsw.c
     src/regions/wernicke.c
     src/regions/hippocampus.c
     src/regions/cortex.c

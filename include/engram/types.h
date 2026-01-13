@@ -5,22 +5,25 @@
 #include <stdbool.h>
 #include <stddef.h>
 
-#define ENGRAM_VECTOR_DIM 256
+#define ENGRAM_DEFAULT_VECTOR_DIM 256
+#define ENGRAM_MAX_VECTOR_DIM 4096
 #define ENGRAM_MAX_ACTIVATIONS 64
 #define ENGRAM_MAX_CONTENT_LEN 4096
 
 typedef uint64_t engram_id_t;
-typedef float engram_vec_t[ENGRAM_VECTOR_DIM];
 
 typedef struct engram engram_t;
 
 typedef struct {
     size_t max_neurons;
     size_t max_synapses;
+    size_t vector_dim;
     float decay_rate;
     float activation_threshold;
     float learning_rate;
     float noise_threshold;
+    const char *storage_path;
+    bool use_mmap;
 } engram_config_t;
 
 typedef struct {
@@ -51,8 +54,10 @@ typedef struct {
     size_t synapse_count;
     size_t synapse_capacity;
     size_t content_count;
+    size_t vector_dim;
     size_t memory_neurons;
     size_t memory_synapses;
+    size_t memory_embeddings;
     size_t memory_content;
     size_t memory_total;
     engram_device_t device;

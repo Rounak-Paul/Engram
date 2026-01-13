@@ -28,6 +28,33 @@ static void benchmark_insert(engram_t *e, int count) {
            count, elapsed / 1000.0, per_op, ops_per_sec);
 }
 
+static void benchmark_bulk_insert(engram_t *e, int count) {
+    const char **texts = malloc(count * sizeof(char *));
+    if (!texts) return;
+    
+    for (int i = 0; i < count; i++) {
+        char *buf = malloc(512);
+        snprintf(buf, 512, "Bulk document %d with topic %d category %d section %d", 
+                 i, i % 100, i % 10, i % 5);
+        texts[i] = buf;
+    }
+    
+    double start = get_time_us();
+    size_t inserted = engram_bulk_insert(e, texts, count);
+    double elapsed = get_time_us() - start;
+    
+    double per_op = elapsed / count;
+    double ops_per_sec = 1000000.0 / per_op;
+    
+    printf("BULK   %d docs: %.2f ms (%.1f μs/op, %.0f ops/sec) [%zu inserted]\n", 
+           count, elapsed / 1000.0, per_op, ops_per_sec, inserted);
+    
+    for (int i = 0; i < count; i++) {
+        free((char *)texts[i]);
+    }
+    free(texts);
+}
+
 static void benchmark_query(engram_t *e, int count) {
     const char *queries[] = {
         "black hole event horizon",
@@ -89,6 +116,9 @@ int main(void) {
     printf("╚══════════════════════════════════════════════════════════════╝\n\n");
     
     engram_config_t config = engram_config_default();
+    config.max_neurons = 500000;
+    config.max_synapses = 2000000;
+    
     engram_t *e = engram_create(&config);
     if (!e) {
         fprintf(stderr, "Failed to create engram\n");
@@ -97,45 +127,56 @@ int main(void) {
     
     engram_stats_t s = engram_stats(e);
     printf("Device: %s\n", s.device == ENGRAM_DEVICE_VULKAN ? "Vulkan GPU" : "CPU");
-    printf("Vector dimensions: 256\n\n");
+    printf("Vector dimensions: %zu\n", s.vector_dim);
+    printf("Max neurons: %zu, Max synapses: %zu\n\n", config.max_neurons, config.max_synapses);
     
-    printf("─── Empty DB ───────────────────────────────────────────────────\n");
+    printf("─── Warmup (1K) ────────────────────────────────────────────────\n");
     benchmark_insert(e, 1000);
     benchmark_query(e, 1000);
     
     s = engram_stats(e);
-    printf("State: %zu neurons, %zu synapses\n\n", s.neuron_count, s.synapse_count);
+    printf("State: %zu neurons\n\n", s.neuron_count);
     
-    printf("─── After 1K docs ──────────────────────────────────────────────\n");
-    benchmark_insert(e, 1000);
+    printf("─── 10K Scale ──────────────────────────────────────────────────\n");
+    benchmark_bulk_insert(e, 10000);
+    benchmark_query(e, 1000);
+    
+    s = engram_stats(e);
+    printf("State: %zu neurons, %.2f MB\n\n", 
+           s.neuron_count, s.memory_total / (1024.0 * 1024.0));
+    
+    printf("─── 50K Scale ──────────────────────────────────────────────────\n");
+    benchmark_bulk_insert(e, 40000);
     benchmark_query(e, 1000);
     benchmark_cold_query(e, 1000);
     
     s = engram_stats(e);
-    printf("State: %zu neurons, %zu synapses\n\n", s.neuron_count, s.synapse_count);
+    printf("State: %zu neurons, %.2f MB\n\n", 
+           s.neuron_count, s.memory_total / (1024.0 * 1024.0));
     
-    printf("─── After 2K docs ──────────────────────────────────────────────\n");
-    benchmark_insert(e, 5000);
+    printf("─── 100K Scale ─────────────────────────────────────────────────\n");
+    benchmark_bulk_insert(e, 50000);
     benchmark_query(e, 1000);
     benchmark_cold_query(e, 1000);
     
     s = engram_stats(e);
-    printf("State: %zu neurons, %zu synapses\n\n", s.neuron_count, s.synapse_count);
+    printf("State: %zu neurons, %.2f MB\n\n", 
+           s.neuron_count, s.memory_total / (1024.0 * 1024.0));
     
-    printf("─── After 7K docs ──────────────────────────────────────────────\n");
-    benchmark_insert(e, 10000);
+    printf("─── 200K Scale ─────────────────────────────────────────────────\n");
+    benchmark_bulk_insert(e, 100000);
     benchmark_query(e, 1000);
     benchmark_cold_query(e, 1000);
     
     s = engram_stats(e);
-    printf("State: %zu neurons, %zu synapses, %.2f MB\n\n", 
-           s.neuron_count, s.synapse_count, s.memory_total / (1024.0 * 1024.0));
+    printf("State: %zu neurons, %.2f MB\n\n", 
+           s.neuron_count, s.memory_total / (1024.0 * 1024.0));
     
     printf("═══════════════════════════════════════════════════════════════\n");
     printf("SUMMARY:\n");
-    printf("  - Insert includes: tokenize + embed + hash lookup + learn\n");
-    printf("  - Query includes: tokenize + embed + activation spread + retrieval\n");
-    printf("  - Cold query: novel terms not in training data\n");
+    printf("  - Bulk insert: tokenize + embed + dedup + HNSW insert\n");
+    printf("  - Query: tokenize + embed + HNSW search (O(log n))\n");
+    printf("  - Target: <50ms query latency at 100K+ vectors\n");
     printf("═══════════════════════════════════════════════════════════════\n");
     
     engram_destroy(e);

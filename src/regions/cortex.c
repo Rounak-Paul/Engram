@@ -28,7 +28,7 @@ void cortex_store(cortex_t *c, engram_id_t id) {
     }
 }
 
-size_t cortex_query(cortex_t *c, substrate_t *s, const engram_vec_t query,
+size_t cortex_query(cortex_t *c, substrate_t *s, const float *query,
                     engram_id_t *results, float *scores, size_t max_results, float threshold) {
     size_t result_count = 0;
     
@@ -38,7 +38,7 @@ size_t cortex_query(cortex_t *c, substrate_t *s, const engram_vec_t query,
     
     for (size_t i = 0; i < s->neuron_count; i++) {
         neuron_t *n = &s->neurons[i];
-        float sim = vec_dot(query, n->embedding);
+        float sim = vec_dot(query, n->embedding, s->vector_dim);
         
         sim *= (0.5f + 0.5f * n->importance / (1.0f + n->importance));
         

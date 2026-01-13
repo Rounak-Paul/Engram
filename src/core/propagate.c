@@ -40,36 +40,8 @@ void propagate_learning(substrate_t *s, engram_id_t *active, size_t count, float
             engram_id_t a = active[i];
             engram_id_t b = active[j];
             
-            synapse_t *existing = substrate_find_synapse(s, a, b);
-            if (!existing) existing = substrate_find_synapse(s, b, a);
-            
-            if (existing) {
-                existing->weight += rate * (1.0f - existing->weight);
-                existing->last_activation = s->tick;
-            } else {
-                size_t syn_idx = s->synapse_count;
-                synapse_t *syn = substrate_alloc_synapse(s);
-                if (syn) {
-                    syn->source = a;
-                    syn->target = b;
-                    syn->weight = rate;
-                    syn->last_activation = s->tick;
-                    size_t bucket = (((uint64_t)a << 32) | b) % 65536;
-                    s->synapse_idx.next[syn_idx] = s->synapse_idx.buckets[bucket];
-                    s->synapse_idx.buckets[bucket] = (uint32_t)syn_idx;
-                }
-                syn_idx = s->synapse_count;
-                syn = substrate_alloc_synapse(s);
-                if (syn) {
-                    syn->source = b;
-                    syn->target = a;
-                    syn->weight = rate;
-                    syn->last_activation = s->tick;
-                    size_t bucket = (((uint64_t)b << 32) | a) % 65536;
-                    s->synapse_idx.next[syn_idx] = s->synapse_idx.buckets[bucket];
-                    s->synapse_idx.buckets[bucket] = (uint32_t)syn_idx;
-                }
-            }
+            substrate_add_synapse(s, a, b, rate);
+            substrate_add_synapse(s, b, a, rate);
         }
     }
 }

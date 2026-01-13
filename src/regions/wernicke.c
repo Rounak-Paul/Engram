@@ -8,7 +8,8 @@
 #define NGRAM_SIZE 3
 #define MAX_WORD_LEN 64
 
-wernicke_t wernicke_create(void) {
+wernicke_t wernicke_create(size_t vector_dim) {
+    (void)vector_dim;
     wernicke_t w = {0};
     w.char_hashes = calloc(256, sizeof(uint32_t));
     w.hash_table_size = WERNICKE_HASH_SIZE;
@@ -76,9 +77,9 @@ void wernicke_tokenize(wernicke_t *w, const char *text, uint32_t *tokens, size_t
     *count = tok_count;
 }
 
-void wernicke_encode(wernicke_t *w, const char *text, engram_vec_t out) {
+void wernicke_encode(wernicke_t *w, const char *text, float *out, size_t dim) {
     (void)w;
-    vec_zero(out);
+    vec_zero(out, dim);
     
     char normalized[4096];
     normalize_text(text, normalized, sizeof(normalized));
@@ -108,7 +109,7 @@ void wernicke_encode(wernicke_t *w, const char *text, engram_vec_t out) {
     for (size_t i = 0; i < word_count; i++) {
         uint64_t h = hash_word(words[i], word_lens[i]);
         
-        for (int d = 0; d < ENGRAM_VECTOR_DIM; d++) {
+        for (size_t d = 0; d < dim; d++) {
             uint64_t mixed = h ^ ((uint64_t)d * 0x9e3779b97f4a7c15ULL);
             mixed ^= mixed >> 33;
             mixed *= 0xff51afd7ed558ccdULL;
@@ -131,7 +132,7 @@ void wernicke_encode(wernicke_t *w, const char *text, engram_vec_t out) {
         
         uint64_t h = hash_word(bigram, len1 + 1 + len2);
         
-        for (int d = 0; d < ENGRAM_VECTOR_DIM; d++) {
+        for (size_t d = 0; d < dim; d++) {
             uint64_t mixed = h ^ ((uint64_t)d * 0x9e3779b97f4a7c15ULL);
             mixed ^= mixed >> 33;
             mixed *= 0xff51afd7ed558ccdULL;
@@ -146,7 +147,7 @@ void wernicke_encode(wernicke_t *w, const char *text, engram_vec_t out) {
         for (size_t j = 0; j + NGRAM_SIZE <= word_lens[i]; j++) {
             uint64_t h = hash_word(words[i] + j, NGRAM_SIZE);
             
-            for (int d = 0; d < ENGRAM_VECTOR_DIM; d++) {
+            for (size_t d = 0; d < dim; d++) {
                 uint64_t mixed = h ^ ((uint64_t)d * 0x9e3779b97f4a7c15ULL);
                 mixed ^= mixed >> 33;
                 
@@ -156,5 +157,5 @@ void wernicke_encode(wernicke_t *w, const char *text, engram_vec_t out) {
         }
     }
     
-    vec_normalize(out);
+    vec_normalize(out, dim);
 }

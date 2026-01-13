@@ -1,46 +1,45 @@
 #include "internal.h"
 #include <math.h>
+#include <string.h>
 
-void vec_zero(engram_vec_t v) {
-    for (int i = 0; i < ENGRAM_VECTOR_DIM; i++) {
-        v[i] = 0.0f;
-    }
+void vec_zero(float *v, size_t dim) {
+    memset(v, 0, dim * sizeof(float));
 }
 
-void vec_add(engram_vec_t dst, const engram_vec_t a, const engram_vec_t b) {
-    for (int i = 0; i < ENGRAM_VECTOR_DIM; i++) {
+void vec_add(float *dst, const float *a, const float *b, size_t dim) {
+    for (size_t i = 0; i < dim; i++) {
         dst[i] = a[i] + b[i];
     }
 }
 
-void vec_scale(engram_vec_t v, float s) {
-    for (int i = 0; i < ENGRAM_VECTOR_DIM; i++) {
+void vec_scale(float *v, float s, size_t dim) {
+    for (size_t i = 0; i < dim; i++) {
         v[i] *= s;
     }
 }
 
-float vec_dot(const engram_vec_t a, const engram_vec_t b) {
+float vec_dot(const float *a, const float *b, size_t dim) {
     float sum = 0.0f;
-    for (int i = 0; i < ENGRAM_VECTOR_DIM; i++) {
+    for (size_t i = 0; i < dim; i++) {
         sum += a[i] * b[i];
     }
     return sum;
 }
 
-float vec_magnitude(const engram_vec_t v) {
-    return sqrtf(vec_dot(v, v));
+float vec_magnitude(const float *v, size_t dim) {
+    return sqrtf(vec_dot(v, v, dim));
 }
 
-void vec_normalize(engram_vec_t v) {
-    float mag = vec_magnitude(v);
+void vec_normalize(float *v, size_t dim) {
+    float mag = vec_magnitude(v, dim);
     if (mag > 1e-8f) {
         float inv = 1.0f / mag;
-        vec_scale(v, inv);
+        vec_scale(v, inv, dim);
     }
 }
 
-void vec_lerp(engram_vec_t dst, const engram_vec_t a, const engram_vec_t b, float t) {
-    for (int i = 0; i < ENGRAM_VECTOR_DIM; i++) {
+void vec_lerp(float *dst, const float *a, const float *b, float t, size_t dim) {
+    for (size_t i = 0; i < dim; i++) {
         dst[i] = a[i] + t * (b[i] - a[i]);
     }
 }
