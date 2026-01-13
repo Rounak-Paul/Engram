@@ -6,3 +6,6 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 
 add_executable(sandbox main.c)
 target_link_libraries(sandbox PRIVATE engram)
+
+add_executable(bench bench.c)
+target_link_libraries(bench PRIVATE engram)
