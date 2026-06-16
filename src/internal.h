@@ -25,9 +25,13 @@ struct neuron {
     engram_id_t id;
     float *embedding;
     float activation;
+    float potential;
+    float threshold;
     float importance;
     uint64_t last_access;
     uint64_t access_count;
+    uint64_t last_fire_tick;
+    uint64_t refractory_until;
     uint32_t synapse_offset;
     uint32_t synapse_count;
 };
@@ -36,6 +40,8 @@ struct synapse {
     engram_id_t source;
     engram_id_t target;
     float weight;
+    float plasticity;
+    int8_t sign;
     uint64_t last_activation;
 };
 
@@ -88,6 +94,8 @@ struct substrate {
     engram_id_t next_id;
     uint64_t tick;
     uint64_t decay_tick;
+    float dopamine;
+    float acetylcholine;
     neuron_index_t neuron_idx;
     synapse_index_t synapse_idx;
     synapse_src_index_t synapse_src_idx;
@@ -101,11 +109,22 @@ struct wernicke {
     size_t hash_table_size;
 };
 
+typedef struct replay_trace replay_trace_t;
+struct replay_trace {
+    engram_id_t members[ENGRAM_REPLAY_PATTERN_MAX];
+    uint8_t member_count;
+    float salience;
+};
+
 struct hippocampus {
     engram_id_t *recent_activations;
     size_t recent_count;
     size_t recent_capacity;
     float consolidation_threshold;
+    replay_trace_t *traces;
+    size_t trace_count;
+    size_t trace_capacity;
+    size_t trace_head;
 };
 
 struct cortex {
@@ -185,7 +204,7 @@ neuron_t *substrate_alloc_neuron(substrate_t *s);
 neuron_t *substrate_alloc_neuron_raw(substrate_t *s);
 synapse_t *substrate_alloc_synapse(substrate_t *s);
 synapse_t *substrate_alloc_synapse_raw(substrate_t *s);
-synapse_t *substrate_add_synapse(substrate_t *s, engram_id_t src, engram_id_t dst, float weight);
+synapse_t *substrate_add_synapse(substrate_t *s, engram_id_t src, engram_id_t dst, float weight, int8_t sign);
 void substrate_rebuild_indices(substrate_t *s);
 neuron_t *substrate_find_neuron(substrate_t *s, engram_id_t id);
 synapse_t *substrate_find_synapse(substrate_t *s, engram_id_t src, engram_id_t dst);
@@ -198,16 +217,20 @@ void wernicke_destroy(wernicke_t *w);
 void wernicke_encode(wernicke_t *w, const char *text, float *out, size_t dim);
 void wernicke_tokenize(wernicke_t *w, const char *text, uint32_t *tokens, size_t *count, size_t max_tokens);
 
-hippocampus_t hippocampus_create(size_t capacity);
+hippocampus_t hippocampus_create(size_t capacity, size_t trace_capacity);
 void hippocampus_destroy(hippocampus_t *h);
 void hippocampus_record(hippocampus_t *h, engram_id_t id);
+void hippocampus_imprint(hippocampus_t *h, const engram_id_t *members, size_t count, float salience);
 void hippocampus_consolidate(hippocampus_t *h, substrate_t *s, float threshold);
+void hippocampus_replay(hippocampus_t *h, substrate_t *s, size_t passes, float rate);
 
 cortex_t cortex_create(size_t capacity);
 void cortex_destroy(cortex_t *c);
 void cortex_store(cortex_t *c, engram_id_t id);
-size_t cortex_query(cortex_t *c, substrate_t *s, const float *query, 
+size_t cortex_query(cortex_t *c, substrate_t *s, const float *query,
                     engram_id_t *results, float *scores, size_t max_results, float threshold);
+void cortex_complete(substrate_t *s, const engram_id_t *seeds, size_t seed_count,
+                     float modulation, size_t max_recruit);
 
 hnsw_t hnsw_create(size_t capacity);
 void hnsw_destroy(hnsw_t *h);
@@ -215,8 +238,10 @@ void hnsw_insert(hnsw_t *h, substrate_t *s, size_t neuron_idx);
 size_t hnsw_search(hnsw_t *h, substrate_t *s, const float *query,
                    size_t *results, float *distances, size_t k, size_t ef);
 
-void propagate_activation(substrate_t *s, engram_id_t source, float activation, float decay, size_t depth);
-void propagate_learning(substrate_t *s, engram_id_t *active, size_t count, float rate);
+size_t propagate_activation(substrate_t *s, engram_id_t source, float input, float decay,
+                            size_t depth, engram_id_t *fired, size_t fired_cap);
+void propagate_stdp(substrate_t *s, const engram_id_t *fired, size_t count, float rate);
+void substrate_modulate(substrate_t *s, float novelty);
 
 #ifdef ENGRAM_VULKAN_ENABLED
 vulkan_ctx_t vulkan_create(void);

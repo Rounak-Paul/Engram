@@ -11,6 +11,12 @@
 #define DEFAULT_ACTIVATION_THRESHOLD 0.95f
 #define DEFAULT_LEARNING_RATE 0.1f
 #define DEFAULT_NOISE_THRESHOLD 0.01f
+#define DEFAULT_FIRE_THRESHOLD 0.5f
+#define DEFAULT_STDP_WINDOW 16.0f
+#define DEFAULT_INHIBITION_STRENGTH 0.3f
+#define DEFAULT_REFRACTORY_PERIOD 3
+#define DEFAULT_REPLAY_PASSES 2
+#define REPLAY_TRACE_CAPACITY 4096
 
 engram_config_t engram_config_default(void) {
     return (engram_config_t){
@@ -21,6 +27,11 @@ engram_config_t engram_config_default(void) {
         .activation_threshold = DEFAULT_ACTIVATION_THRESHOLD,
         .learning_rate = DEFAULT_LEARNING_RATE,
         .noise_threshold = DEFAULT_NOISE_THRESHOLD,
+        .fire_threshold = DEFAULT_FIRE_THRESHOLD,
+        .stdp_window = DEFAULT_STDP_WINDOW,
+        .inhibition_strength = DEFAULT_INHIBITION_STRENGTH,
+        .refractory_period = DEFAULT_REFRACTORY_PERIOD,
+        .replay_passes = DEFAULT_REPLAY_PASSES,
         .storage_path = NULL,
         .use_mmap = false
     };
@@ -58,7 +69,7 @@ engram_t *engram_create(const engram_config_t *config) {
         return NULL;
     }
     
-    e->hippocampus = hippocampus_create(ENGRAM_MAX_ACTIVATIONS * 10);
+    e->hippocampus = hippocampus_create(ENGRAM_MAX_ACTIVATIONS * 10, REPLAY_TRACE_CAPACITY);
     e->cortex = cortex_create(e->config.max_neurons);
     e->hnsw = hnsw_create(e->config.max_neurons);
     
@@ -184,19 +195,20 @@ static neuron_t *find_or_create_neuron(engram_t *e, const float *embedding,
     
     neuron_t *n = substrate_alloc_neuron(&e->substrate);
     if (!n) return NULL;
-    
+
+    n->threshold = e->config.fire_threshold;
     memcpy(n->embedding, embedding, dim * sizeof(float));
     content_map_insert(&e->content_map, n->id, content);
     cortex_store(&e->cortex, n->id);
-    
+
     size_t neuron_idx = n - e->substrate.neurons;
     hnsw_insert(&e->hnsw, &e->substrate, neuron_idx);
-    
+
     if (best_match && best_sim >= threshold * 0.7f) {
-        substrate_add_synapse(&e->substrate, n->id, best_match->id, best_sim);
-        substrate_add_synapse(&e->substrate, best_match->id, n->id, best_sim * 0.5f);
+        substrate_add_synapse(&e->substrate, n->id, best_match->id, best_sim, 1);
+        substrate_add_synapse(&e->substrate, best_match->id, n->id, best_sim * 0.5f, 1);
     }
-    
+
     return n;
 }
 
@@ -238,41 +250,62 @@ static engram_response_t engram_cue_internal(engram_t *e, const char *input, boo
     }
     
     if (!readonly) {
+        size_t prev_neuron_count = e->substrate.neuron_count;
         neuron_t *input_neuron = find_or_create_neuron(e, query_embedding, input,
                                                         e->config.activation_threshold);
         if (input_neuron) {
-            propagate_activation(&e->substrate, input_neuron->id, 1.0f, 0.7f, 3);
-            
+            bool is_novel = e->substrate.neuron_count > prev_neuron_count;
+            float top_sim = count > 0 ? result_scores[0] : 0.0f;
+            float novelty = is_novel ? 1.0f : (1.0f - top_sim);
+            substrate_modulate(&e->substrate, novelty);
+
+            engram_id_t fired[ENGRAM_MAX_ACTIVATIONS];
+            size_t fired_count = propagate_activation(&e->substrate, input_neuron->id,
+                                                       1.0f, 0.7f, 3,
+                                                       fired, ENGRAM_MAX_ACTIVATIONS);
+
             for (size_t i = 0; i < count && i < 8; i++) {
-                if (result_scores[i] >= 0.4f) {
-                    propagate_activation(&e->substrate, result_ids[i], result_scores[i], 0.7f, 2);
+                if (result_scores[i] >= 0.4f && fired_count < ENGRAM_MAX_ACTIVATIONS) {
+                    fired_count += propagate_activation(&e->substrate, result_ids[i],
+                                                        result_scores[i], 0.7f, 2,
+                                                        fired + fired_count,
+                                                        ENGRAM_MAX_ACTIVATIONS - fired_count);
                 }
             }
-            
-            engram_id_t active_neurons[8];
-            size_t active_count = 0;
-            active_neurons[active_count++] = input_neuron->id;
-            
-            for (size_t i = 0; i < count && active_count < 4; i++) {
+
+            engram_id_t cofire[ENGRAM_REPLAY_PATTERN_MAX];
+            size_t cofire_count = 0;
+            cofire[cofire_count++] = input_neuron->id;
+
+            for (size_t i = 0; i < count && cofire_count < ENGRAM_REPLAY_PATTERN_MAX; i++) {
                 if (result_scores[i] >= 0.5f) {
-                    active_neurons[active_count++] = result_ids[i];
+                    cofire[cofire_count++] = result_ids[i];
                     hippocampus_record(&e->hippocampus, result_ids[i]);
+                } else if (result_scores[i] >= 0.3f) {
+                    substrate_add_synapse(&e->substrate, input_neuron->id, result_ids[i],
+                                          e->config.inhibition_strength, -1);
                 }
             }
-            
-            if (active_count > 1) {
-                propagate_learning(&e->substrate, active_neurons, active_count, e->config.learning_rate);
+
+            if (cofire_count > 1) {
+                propagate_stdp(&e->substrate, cofire, cofire_count, e->config.learning_rate);
+                hippocampus_imprint(&e->hippocampus, cofire, cofire_count,
+                                    e->substrate.dopamine);
+                cortex_complete(&e->substrate, cofire, cofire_count,
+                                e->substrate.acetylcholine, 16);
             }
-            
+
             hippocampus_consolidate(&e->hippocampus, &e->substrate, e->config.activation_threshold);
-            
+
             if (e->substrate.synapse_count > e->config.max_synapses * 0.9) {
                 substrate_prune(&e->substrate, e->config.noise_threshold);
             }
-            
+
             e->substrate.tick++;
             if (e->substrate.tick - e->substrate.decay_tick >= 100) {
                 substrate_decay(&e->substrate, e->config.decay_rate);
+                hippocampus_replay(&e->hippocampus, &e->substrate,
+                                   e->config.replay_passes, e->config.learning_rate);
                 e->substrate.decay_tick = e->substrate.tick;
             }
         }
@@ -340,7 +373,8 @@ static size_t engram_bulk_insert_internal(engram_t *e, const float *embeddings,
         
         neuron_t *n = substrate_alloc_neuron(&e->substrate);
         if (!n) break;
-        
+
+        n->threshold = e->config.fire_threshold;
         memcpy(n->embedding, emb, dim * sizeof(float));
         if (text) {
             content_map_insert(&e->content_map, n->id, text);
@@ -431,7 +465,7 @@ engram_stats_t engram_stats(engram_t *e) {
     return s;
 }
 
-#define ENGRAM_FILE_MAGIC 0x454E4752414D0002ULL
+#define ENGRAM_FILE_MAGIC 0x454E4752414D0003ULL
 
 engram_status_t engram_save(engram_t *e, const char *path) {
     if (!e || !path) return ENGRAM_ERR_INVALID;
@@ -455,16 +489,20 @@ engram_status_t engram_save(engram_t *e, const char *path) {
         fwrite(&n->id, sizeof(engram_id_t), 1, f);
         fwrite(n->embedding, sizeof(float), vector_dim, f);
         fwrite(&n->activation, sizeof(float), 1, f);
+        fwrite(&n->threshold, sizeof(float), 1, f);
         fwrite(&n->importance, sizeof(float), 1, f);
         fwrite(&n->last_access, sizeof(uint64_t), 1, f);
         fwrite(&n->access_count, sizeof(uint64_t), 1, f);
+        fwrite(&n->last_fire_tick, sizeof(uint64_t), 1, f);
     }
-    
+
     for (size_t i = 0; i < e->substrate.synapse_count; i++) {
         synapse_t *s = &e->substrate.synapses[i];
         fwrite(&s->source, sizeof(engram_id_t), 1, f);
         fwrite(&s->target, sizeof(engram_id_t), 1, f);
         fwrite(&s->weight, sizeof(float), 1, f);
+        fwrite(&s->plasticity, sizeof(float), 1, f);
+        fwrite(&s->sign, sizeof(int8_t), 1, f);
         fwrite(&s->last_activation, sizeof(uint64_t), 1, f);
     }
     
@@ -520,11 +558,13 @@ engram_status_t engram_load(engram_t *e, const char *path) {
         fread(&n->id, sizeof(engram_id_t), 1, f);
         fread(n->embedding, sizeof(float), file_vector_dim, f);
         fread(&n->activation, sizeof(float), 1, f);
+        fread(&n->threshold, sizeof(float), 1, f);
         fread(&n->importance, sizeof(float), 1, f);
         fread(&n->last_access, sizeof(uint64_t), 1, f);
         fread(&n->access_count, sizeof(uint64_t), 1, f);
+        fread(&n->last_fire_tick, sizeof(uint64_t), 1, f);
     }
-    
+
     for (size_t i = 0; i < synapse_count; i++) {
         synapse_t *s = substrate_alloc_synapse_raw(&e->substrate);
         if (!s) {
@@ -534,6 +574,8 @@ engram_status_t engram_load(engram_t *e, const char *path) {
         fread(&s->source, sizeof(engram_id_t), 1, f);
         fread(&s->target, sizeof(engram_id_t), 1, f);
         fread(&s->weight, sizeof(float), 1, f);
+        fread(&s->plasticity, sizeof(float), 1, f);
+        fread(&s->sign, sizeof(int8_t), 1, f);
         fread(&s->last_activation, sizeof(uint64_t), 1, f);
     }
     

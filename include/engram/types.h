@@ -9,6 +9,9 @@
 #define ENGRAM_MAX_VECTOR_DIM 4096
 #define ENGRAM_MAX_ACTIVATIONS 64
 #define ENGRAM_MAX_CONTENT_LEN 4096
+#define ENGRAM_REPLAY_PATTERN_MAX 8
+#define ENGRAM_DEFAULT_REFRACTORY 3
+#define ENGRAM_DEFAULT_STDP_WINDOW 16
 
 typedef uint64_t engram_id_t;
 
@@ -22,6 +25,11 @@ typedef struct {
     float activation_threshold;
     float learning_rate;
     float noise_threshold;
+    float fire_threshold;
+    float stdp_window;
+    float inhibition_strength;
+    size_t refractory_period;
+    size_t replay_passes;
     const char *storage_path;
     bool use_mmap;
 } engram_config_t;

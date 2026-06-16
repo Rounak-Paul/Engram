@@ -1,7 +1,6 @@
 #include "internal.h"
 #include <stdlib.h>
 #include <string.h>
-#include <math.h>
 
 cortex_t cortex_create(size_t capacity) {
     cortex_t c = {0};
@@ -71,4 +70,55 @@ size_t cortex_query(cortex_t *c, substrate_t *s, const float *query,
     }
     
     return result_count;
+}
+
+typedef struct {
+    substrate_t *s;
+    float modulation;
+    engram_id_t *recruited;
+    size_t *count;
+    size_t cap;
+} complete_ctx_t;
+
+static void recruit_synapse(synapse_t *syn, void *ctx) {
+    complete_ctx_t *c = ctx;
+    if (syn->sign <= 0 || syn->weight < 0.3f) return;
+    if (*c->count >= c->cap) return;
+
+    neuron_t *n = substrate_find_neuron(c->s, syn->target);
+    if (!n) return;
+
+    float drive = syn->weight * c->modulation;
+    n->potential += drive;
+    if (n->potential >= n->threshold && c->s->tick >= n->refractory_until) {
+        for (size_t i = 0; i < *c->count; i++) {
+            if (c->recruited[i] == syn->target) return;
+        }
+        c->recruited[(*c->count)++] = syn->target;
+    }
+}
+
+void cortex_complete(substrate_t *s, const engram_id_t *seeds, size_t seed_count,
+                     float modulation, size_t max_recruit) {
+    if (modulation <= 0.0f || max_recruit == 0) return;
+
+    engram_id_t recruited[ENGRAM_MAX_ACTIVATIONS];
+    size_t count = 0;
+    size_t cap = max_recruit < ENGRAM_MAX_ACTIVATIONS ? max_recruit : ENGRAM_MAX_ACTIVATIONS;
+
+    complete_ctx_t ctx = { .s = s, .modulation = modulation,
+                           .recruited = recruited, .count = &count, .cap = cap };
+
+    for (size_t i = 0; i < seed_count; i++) {
+        substrate_for_each_synapse(s, seeds[i], recruit_synapse, &ctx);
+    }
+
+    for (size_t i = 0; i < count; i++) {
+        neuron_t *n = substrate_find_neuron(s, recruited[i]);
+        if (n) {
+            n->activation = n->potential > 1.0f ? 1.0f : n->potential;
+            n->last_fire_tick = s->tick;
+            n->importance += 0.05f;
+        }
+    }
 }

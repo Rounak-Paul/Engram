@@ -262,9 +262,13 @@ neuron_t *substrate_alloc_neuron(substrate_t *s) {
     n->id = s->next_id++;
     n->embedding = s->embeddings + idx * s->vector_dim;
     n->activation = 0.0f;
+    n->potential = 0.0f;
+    n->threshold = 0.5f;
     n->importance = 1.0f;
     n->last_access = s->tick;
     n->access_count = 0;
+    n->last_fire_tick = 0;
+    n->refractory_until = 0;
     n->synapse_offset = 0;
     n->synapse_count = 0;
     neuron_index_insert(&s->neuron_idx, n->id, idx);
@@ -312,26 +316,30 @@ synapse_t *substrate_alloc_synapse_raw(substrate_t *s) {
     return &s->synapses[s->synapse_count++];
 }
 
-synapse_t *substrate_add_synapse(substrate_t *s, engram_id_t src, engram_id_t dst, float weight) {
+synapse_t *substrate_add_synapse(substrate_t *s, engram_id_t src, engram_id_t dst, float weight, int8_t sign) {
     synapse_t *existing = substrate_find_synapse(s, src, dst);
     if (existing) {
-        existing->weight += weight * (1.0f - existing->weight);
+        if (existing->sign == sign) {
+            existing->weight += weight * (1.0f - existing->weight);
+        }
         existing->last_activation = s->tick;
         return existing;
     }
-    
+
     uint32_t idx = (uint32_t)s->synapse_count;
     synapse_t *syn = substrate_alloc_synapse(s);
     if (!syn) return NULL;
-    
+
     syn->source = src;
     syn->target = dst;
     syn->weight = weight;
+    syn->plasticity = 1.0f;
+    syn->sign = sign;
     syn->last_activation = s->tick;
-    
+
     synapse_index_insert(&s->synapse_idx, src, dst, idx);
     synapse_src_index_insert(&s->synapse_src_idx, src, idx);
-    
+
     return syn;
 }
 
@@ -388,6 +396,8 @@ void substrate_decay(substrate_t *s, float rate) {
     for (size_t i = 0; i < s->neuron_count; i++) {
         neuron_t *n = &s->neurons[i];
         n->activation *= (1.0f - rate);
+        n->potential *= (1.0f - rate * 2.0f);
+        if (n->potential < 0.0f) n->potential = 0.0f;
         uint64_t age = s->tick - n->last_access;
         if (age > 0) {
             float time_decay = 1.0f / (1.0f + (float)age * rate * 0.01f);
@@ -400,7 +410,10 @@ void substrate_decay(substrate_t *s, float rate) {
         if (age > 100) {
             syn->weight *= (1.0f - rate * 0.1f);
         }
+        syn->plasticity += (1.0f - syn->plasticity) * rate;
     }
+    s->dopamine *= (1.0f - rate * 5.0f);
+    if (s->dopamine < 0.0f) s->dopamine = 0.0f;
 }
 
 void substrate_prune(substrate_t *s, float threshold) {
