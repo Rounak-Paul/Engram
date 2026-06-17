@@ -176,9 +176,9 @@ static const char *content_map_find(content_map_t *m, engram_id_t id) {
 static neuron_t *find_or_create_neuron(engram_t *e, const float *embedding,
                                         const char *content, float threshold) {
     float best_sim = -1.0f;
-    neuron_t *best_match = NULL;
+    engram_id_t best_match = 0;
     size_t dim = e->config.vector_dim;
-    
+
     if (e->hnsw.count > 0) {
         size_t result_idx;
         float result_sim;
@@ -189,27 +189,28 @@ static neuron_t *find_or_create_neuron(engram_t *e, const float *embedding,
         }
         if (found > 0 && result_sim > best_sim) {
             best_sim = result_sim;
-            best_match = &e->substrate.neurons[result_idx];
+            best_match = e->substrate.neurons[result_idx].id;
         }
     }
-    
+
     neuron_t *n = substrate_alloc_neuron(&e->substrate);
     if (!n) return NULL;
 
+    engram_id_t new_id = n->id;
     n->threshold = e->config.fire_threshold;
     memcpy(n->embedding, embedding, dim * sizeof(float));
-    content_map_insert(&e->content_map, n->id, content);
-    cortex_store(&e->cortex, n->id);
+    content_map_insert(&e->content_map, new_id, content);
+    cortex_store(&e->cortex, new_id);
 
     size_t neuron_idx = n - e->substrate.neurons;
     hnsw_insert(&e->hnsw, &e->substrate, neuron_idx);
 
     if (best_match && best_sim >= threshold * 0.7f) {
-        substrate_add_synapse(&e->substrate, n->id, best_match->id, best_sim, 1);
-        substrate_add_synapse(&e->substrate, best_match->id, n->id, best_sim * 0.5f, 1);
+        substrate_add_synapse(&e->substrate, new_id, best_match, best_sim, 1);
+        substrate_add_synapse(&e->substrate, best_match, new_id, best_sim * 0.5f, 1);
     }
 
-    return n;
+    return substrate_find_neuron(&e->substrate, new_id);
 }
 
 static engram_response_t engram_cue_internal(engram_t *e, const char *input, bool readonly) {
